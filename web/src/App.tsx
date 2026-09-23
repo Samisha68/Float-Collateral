@@ -24,7 +24,7 @@ export default function App() {
   return (
     <div className="layout">
       <header className="masthead">
-        <div className="wordmark">FLOAT</div>
+        <img className="wordmark" src="/float-favicon.svg" alt="Float" />
         <nav className="tabs">
           {TABS.map(([id, label]) => (
             <button key={id} aria-current={tab === id} onClick={() => setTab(id)}>
