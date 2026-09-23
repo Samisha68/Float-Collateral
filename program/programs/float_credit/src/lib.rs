@@ -286,7 +286,7 @@ pub mod float_credit {
 
         // Disburse.
         let market_bump = ctx.accounts.market.bump;
-        let seeds: &[&[u8]] = &[MARKET_SEED, &[market_bump]];
+        let seeds: &[&[u8]] = &[MARKET_SEED, MARKET_VERSION, &[market_bump]];
         token_interface::transfer_checked(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
@@ -586,11 +586,11 @@ pub struct InitMarket<'info> {
         seeds = [MARKET_SEED, MARKET_VERSION],
         bump
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     /// CHECK: PDA that holds pledged pools' creator role. Never carries data.
     #[account(seeds = [POOL_AUTHORITY_SEED], bump)]
     pub pool_authority: UncheckedAccount<'info>,
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         init,
         payer = admin,
@@ -600,7 +600,7 @@ pub struct InitMarket<'info> {
         seeds = [USDC_VAULT_SEED, MARKET_VERSION],
         bump
     )]
-    pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -615,7 +615,7 @@ pub struct CloseMarket<'info> {
         bump = market.bump,
         close = admin
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
 }
 
 #[derive(Accounts)]
@@ -623,7 +623,7 @@ pub struct SetVerifier<'info> {
     #[account(address = market.admin @ FloatError::Unauthorized)]
     pub admin: Signer<'info>,
     #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
 }
 
 #[derive(Accounts)]
@@ -631,7 +631,7 @@ pub struct VerifyBusiness<'info> {
     #[account(mut, address = market.verifier @ FloatError::Unauthorized)]
     pub verifier: Signer<'info>,
     #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     /// CHECK: the business being approved; identified by key only.
     pub borrower: UncheckedAccount<'info>,
     #[account(
@@ -641,7 +641,7 @@ pub struct VerifyBusiness<'info> {
         seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
         bump
     )]
-    pub verification: Account<'info, BusinessVerification>,
+    pub verification: Box<Account<'info, BusinessVerification>>,
     #[account(
         init_if_needed,
         payer = verifier,
@@ -649,7 +649,7 @@ pub struct VerifyBusiness<'info> {
         seeds = [RECORD_SEED, borrower.key().as_ref()],
         bump
     )]
-    pub record: Account<'info, BusinessRecord>,
+    pub record: Box<Account<'info, BusinessRecord>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -658,13 +658,18 @@ pub struct PledgePool<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
     #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(
         seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
         bump = verification.bump,
         constraint = verification.verified @ FloatError::BusinessNotVerified
     )]
-    pub verification: Account<'info, BusinessVerification>,
+    pub verification: Box<Account<'info, BusinessVerification>>,
+    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
+    #[account(mut)]
+    pub virtual_pool: UncheckedAccount<'info>,
+    /// CHECK: Meteora PoolConfig. Layout and owner checked in ConfigView::load.
+    pub pool_config: UncheckedAccount<'info>,
     #[account(
         init,
         payer = borrower,
@@ -672,15 +677,10 @@ pub struct PledgePool<'info> {
         seeds = [PLEDGE_SEED, virtual_pool.key().as_ref()],
         bump
     )]
-    pub pledge: Account<'info, PledgedPool>,
+    pub pledge: Box<Account<'info, PledgedPool>>,
     /// CHECK: PDA that receives the creator role. Validated by seeds.
     #[account(seeds = [POOL_AUTHORITY_SEED], bump = market.pool_authority_bump)]
     pub pool_authority: UncheckedAccount<'info>,
-    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
-    #[account(mut)]
-    pub virtual_pool: UncheckedAccount<'info>,
-    /// CHECK: Meteora PoolConfig. Layout and owner checked in ConfigView::load.
-    pub pool_config: UncheckedAccount<'info>,
     /// CHECK: Meteora's event authority PDA.
     pub dbc_event_authority: UncheckedAccount<'info>,
     /// CHECK: the Meteora program itself.
@@ -694,24 +694,26 @@ pub struct Borrow<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
     #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(
         seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
         bump = verification.bump
     )]
-    pub verification: Account<'info, BusinessVerification>,
+    pub verification: Box<Account<'info, BusinessVerification>>,
     #[account(
         mut,
         seeds = [RECORD_SEED, borrower.key().as_ref()],
         bump = record.bump
     )]
-    pub record: Account<'info, BusinessRecord>,
+    pub record: Box<Account<'info, BusinessRecord>>,
+    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
+    pub virtual_pool: UncheckedAccount<'info>,
     #[account(
         seeds = [PLEDGE_SEED, virtual_pool.key().as_ref()],
         bump = pledge.bump,
         constraint = pledge.borrower == borrower.key() @ FloatError::PledgeNotYours
     )]
-    pub pledge: Account<'info, PledgedPool>,
+    pub pledge: Box<Account<'info, PledgedPool>>,
     #[account(
         init_if_needed,
         payer = borrower,
@@ -719,22 +721,20 @@ pub struct Borrow<'info> {
         seeds = [LOAN_SEED, borrower.key().as_ref()],
         bump
     )]
-    pub loan: Account<'info, Loan>,
+    pub loan: Box<Account<'info, Loan>>,
     /// CHECK: PDA holding the creator role. Validated by seeds.
     #[account(seeds = [POOL_AUTHORITY_SEED], bump = market.pool_authority_bump)]
     pub pool_authority: UncheckedAccount<'info>,
-    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
-    pub virtual_pool: UncheckedAccount<'info>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
-    pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         constraint = borrower_usdc.mint == market.usdc_mint @ FloatError::WrongMint,
         constraint = borrower_usdc.owner == borrower.key() @ FloatError::WrongTokenOwner
     )]
-    pub borrower_usdc: InterfaceAccount<'info, TokenAccount>,
+    pub borrower_usdc: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -745,24 +745,24 @@ pub struct CollectFees<'info> {
     #[account(mut)]
     pub cranker: Signer<'info>,
     #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
+    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
+    #[account(mut)]
+    pub virtual_pool: UncheckedAccount<'info>,
     #[account(
         seeds = [PLEDGE_SEED, virtual_pool.key().as_ref()],
         bump = pledge.bump
     )]
-    pub pledge: Account<'info, PledgedPool>,
+    pub pledge: Box<Account<'info, PledgedPool>>,
     #[account(
         mut,
         seeds = [LOAN_SEED, pledge.borrower.as_ref()],
         bump = loan.bump
     )]
-    pub loan: Account<'info, Loan>,
+    pub loan: Box<Account<'info, Loan>>,
     /// CHECK: PDA holding the creator role. Validated by seeds.
     #[account(seeds = [POOL_AUTHORITY_SEED], bump = market.pool_authority_bump)]
     pub pool_authority: UncheckedAccount<'info>,
-    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
-    #[account(mut)]
-    pub virtual_pool: UncheckedAccount<'info>,
     /// CHECK: Meteora's internal pool authority PDA.
     pub dbc_pool_authority: UncheckedAccount<'info>,
     /// CHECK: pool's base token vault, supplied by Meteora's layout.
@@ -777,9 +777,9 @@ pub struct CollectFees<'info> {
     #[account(mut)]
     pub float_base_account: UncheckedAccount<'info>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
-    pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     /// CHECK: token program owning the base mint.
     pub token_base_program: UncheckedAccount<'info>,
     pub token_program: Interface<'info, TokenInterface>,
@@ -795,30 +795,30 @@ pub struct Repay<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
     #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(
         mut,
         seeds = [RECORD_SEED, borrower.key().as_ref()],
         bump = record.bump
     )]
-    pub record: Account<'info, BusinessRecord>,
+    pub record: Box<Account<'info, BusinessRecord>>,
     #[account(
         mut,
         seeds = [LOAN_SEED, borrower.key().as_ref()],
         bump = loan.bump,
         constraint = loan.borrower == borrower.key() @ FloatError::LoanNotYours
     )]
-    pub loan: Account<'info, Loan>,
+    pub loan: Box<Account<'info, Loan>>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
-    pub usdc_mint: InterfaceAccount<'info, Mint>,
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
-    pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         constraint = borrower_usdc.mint == market.usdc_mint @ FloatError::WrongMint,
         constraint = borrower_usdc.owner == borrower.key() @ FloatError::WrongTokenOwner
     )]
-    pub borrower_usdc: InterfaceAccount<'info, TokenAccount>,
+    pub borrower_usdc: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -827,25 +827,25 @@ pub struct ReleasePool<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
     #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
+    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
+    #[account(mut)]
+    pub virtual_pool: UncheckedAccount<'info>,
     #[account(
         mut,
         seeds = [PLEDGE_SEED, virtual_pool.key().as_ref()],
         bump = pledge.bump,
         constraint = pledge.borrower == borrower.key() @ FloatError::PledgeNotYours
     )]
-    pub pledge: Account<'info, PledgedPool>,
+    pub pledge: Box<Account<'info, PledgedPool>>,
     #[account(
         seeds = [LOAN_SEED, borrower.key().as_ref()],
         bump = loan.bump
     )]
-    pub loan: Account<'info, Loan>,
+    pub loan: Box<Account<'info, Loan>>,
     /// CHECK: PDA holding the creator role. Validated by seeds.
     #[account(seeds = [POOL_AUTHORITY_SEED], bump = market.pool_authority_bump)]
     pub pool_authority: UncheckedAccount<'info>,
-    /// CHECK: Meteora VirtualPool. Layout and owner checked in PoolView::load.
-    #[account(mut)]
-    pub virtual_pool: UncheckedAccount<'info>,
     /// CHECK: Meteora PoolConfig.
     pub pool_config: UncheckedAccount<'info>,
     /// CHECK: Meteora's event authority PDA.
