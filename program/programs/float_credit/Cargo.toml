@@ -1,0 +1,21 @@
+[package]
+name = "float_credit"
+version = "0.1.0"
+description = "Float — working capital against an assigned Meteora DBC creator fee stream"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "float_credit"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
