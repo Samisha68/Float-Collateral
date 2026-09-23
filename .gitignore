@@ -8,3 +8,5 @@ test-ledger/
 *.log
 .DS_Store
 scripts/state.json
+.gstack/
+web/dist/

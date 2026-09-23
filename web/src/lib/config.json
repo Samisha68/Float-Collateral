@@ -1,0 +1,20 @@
+{
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "EmadJs2c9bZKoncD2cirBGn7qdNWbFqaeYqPrM5LkG1f",
+  "usdcMint": "2zFZ2yQCYt1b4NiKS6YVFMHXrbGVCnHz7AewD1isxwpm",
+  "dbcConfig": "Fnk4H8myUWEdRFGj7ZAJcrmPhF5C8ZwX46pSyGsdMrmt",
+  "market": "CrPdHDssuHunq5Mswz6VkTs2bMxbYUmH99873seq2QXu",
+  "poolAuthority": "FZtUSu2YyY5c5BvsDn63M451yuGzQtfBYQ9BtMsJA5um",
+  "usdcVault": "9v6urszfofqmQvma3f45J2NAtm4JHNCwcSWSacmNh5Xq",
+  "borrowerA": {
+    "label": "Acme Labs",
+    "wallet": "wbG6DhYrd3cpTRiPTVzJayT6RdW7w4FcdwaWpkmAazx",
+    "pool": null
+  },
+  "borrowerB": {
+    "label": "Bravo Labs",
+    "wallet": "CmgJxWVi8CNb6AjW8NtLf7ZmH5sWVVSEG3hzWpQM4RqJ",
+    "pool": "3YZSGkucJJrUvyHnxQKssV5oeT2s4deDhhysazG5P25c"
+  },
+  "demoPool": "3svMNFGD4XC11Lf6K1Mq4aEGS5LjfbU1AYa9BagXAXX4"
+}

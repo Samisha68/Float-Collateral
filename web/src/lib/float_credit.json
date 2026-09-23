@@ -1,0 +1,1932 @@
+{
+  "address": "EmadJs2c9bZKoncD2cirBGn7qdNWbFqaeYqPrM5LkG1f",
+  "metadata": {
+    "name": "float_credit",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Float — working capital against an assigned Meteora DBC creator fee stream"
+  },
+  "instructions": [
+    {
+      "name": "borrow",
+      "docs": [
+        "Draw USDC against the pledged pool's observed fee run rate.",
+        "",
+        "Two independent gates, and both must pass:",
+        "1. principal must fit inside the approved credit limit, which the",
+        "repayment record cannot move",
+        "2. fees projected over the term must cover the principal at the",
+        "margin the record has earned"
+      ],
+      "discriminator": [
+        228,
+        253,
+        131,
+        202,
+        207,
+        116,
+        89,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "virtual_pool"
+        },
+        {
+          "name": "pledge",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  101,
+                  100,
+                  103,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "virtual_pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "term_days",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "close_market",
+      "docs": [
+        "Tear the market down so it can be stood up again. Admin only, and only",
+        "once nothing is owed, so it can never be used to walk away from live",
+        "loans. This exists for devnet iteration and for resetting the demo",
+        "between runs; the README says as much."
+      ],
+      "discriminator": [
+        88,
+        154,
+        248,
+        186,
+        48,
+        14,
+        123,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "collect_fees",
+      "docs": [
+        "Sweep the pool's accrued creator fees into Float's vault against the",
+        "live loan. Permissionless on purpose: anyone may push a borrower's",
+        "collection forward, nobody may divert it, because the destination is",
+        "fixed to Float's vault by the account constraints."
+      ],
+      "discriminator": [
+        164,
+        152,
+        207,
+        99,
+        30,
+        186,
+        19,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "Anyone may push collection forward."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "virtual_pool",
+          "writable": true
+        },
+        {
+          "name": "pledge",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  101,
+                  100,
+                  103,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "virtual_pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pledge.borrower",
+                "account": "PledgedPool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dbc_pool_authority"
+        },
+        {
+          "name": "pool_base_vault",
+          "writable": true
+        },
+        {
+          "name": "pool_quote_vault",
+          "writable": true
+        },
+        {
+          "name": "base_mint"
+        },
+        {
+          "name": "float_base_account",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_base_program"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "dbc_event_authority"
+        },
+        {
+          "name": "dbc_program",
+          "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_market",
+      "docs": [
+        "Stand up the market. Admin holds configuration; the verifier approves",
+        "businesses; the USDC vault funds advances and receives repayments."
+      ],
+      "discriminator": [
+        33,
+        253,
+        15,
+        116,
+        89,
+        25,
+        127,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "observation_secs",
+          "type": "i64"
+        },
+        {
+          "name": "max_extrapolation_ratio",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "pledge_pool",
+      "docs": [
+        "Pledge a DBC pool by handing its creator role to Float.",
+        "",
+        "The borrower signs, and this instruction calls Meteora's",
+        "`transfer_pool_creator` inside the same transaction, so the pledge is",
+        "atomic: either Float records the pledge and holds the role, or neither",
+        "happened. After this returns, the borrower cannot claim the pool's",
+        "creator fees. Only Float's pool-authority PDA can."
+      ],
+      "discriminator": [
+        10,
+        178,
+        246,
+        77,
+        82,
+        57,
+        63,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "virtual_pool",
+          "writable": true
+        },
+        {
+          "name": "pool_config"
+        },
+        {
+          "name": "pledge",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  101,
+                  100,
+                  103,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "virtual_pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "dbc_event_authority"
+        },
+        {
+          "name": "dbc_program",
+          "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "release_pool",
+      "docs": [
+        "Hand the pool's creator role back. Only once nothing is owed."
+      ],
+      "discriminator": [
+        231,
+        58,
+        235,
+        5,
+        167,
+        9,
+        247,
+        129
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "virtual_pool",
+          "writable": true
+        },
+        {
+          "name": "pledge",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  101,
+                  100,
+                  103,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "virtual_pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_config"
+        },
+        {
+          "name": "dbc_event_authority"
+        },
+        {
+          "name": "dbc_program",
+          "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "repay",
+      "docs": [
+        "Settle the loan. Collected fees count first; the borrower tops up",
+        "whatever the stream did not cover. A loan settled after its due date",
+        "still settles, and is recorded as having been late."
+      ],
+      "discriminator": [
+        234,
+        103,
+        67,
+        82,
+        208,
+        234,
+        219,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_verifier",
+      "docs": [
+        "Move the verifier role. Admin only."
+      ],
+      "discriminator": [
+        186,
+        247,
+        191,
+        131,
+        148,
+        158,
+        213,
+        63
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_verifier",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "verify_business",
+      "docs": [
+        "Approve a business and set its exposure. `kyb_reference` is a hash of",
+        "the off-chain evidence bundle; the documents themselves never touch the",
+        "chain. For the hackathon the verifier is Float's own key, which the",
+        "README states plainly."
+      ],
+      "discriminator": [
+        147,
+        88,
+        244,
+        169,
+        207,
+        104,
+        77,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "verifier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower"
+        },
+        {
+          "name": "verification",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "kyb_reference",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "credit_limit",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BusinessRecord",
+      "discriminator": [
+        151,
+        174,
+        157,
+        188,
+        12,
+        123,
+        47,
+        37
+      ]
+    },
+    {
+      "name": "BusinessVerification",
+      "discriminator": [
+        99,
+        77,
+        218,
+        118,
+        78,
+        133,
+        211,
+        163
+      ]
+    },
+    {
+      "name": "Loan",
+      "discriminator": [
+        20,
+        195,
+        70,
+        117,
+        165,
+        227,
+        182,
+        1
+      ]
+    },
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
+      ]
+    },
+    {
+      "name": "PledgedPool",
+      "discriminator": [
+        119,
+        90,
+        138,
+        248,
+        140,
+        11,
+        214,
+        167
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BusinessVerified",
+      "discriminator": [
+        56,
+        40,
+        136,
+        123,
+        144,
+        39,
+        63,
+        184
+      ]
+    },
+    {
+      "name": "Drawn",
+      "discriminator": [
+        87,
+        120,
+        94,
+        189,
+        167,
+        148,
+        44,
+        221
+      ]
+    },
+    {
+      "name": "FeesCollected",
+      "discriminator": [
+        233,
+        23,
+        117,
+        225,
+        107,
+        178,
+        254,
+        8
+      ]
+    },
+    {
+      "name": "MarketClosed",
+      "discriminator": [
+        86,
+        91,
+        119,
+        43,
+        94,
+        0,
+        217,
+        113
+      ]
+    },
+    {
+      "name": "MarketInitialized",
+      "discriminator": [
+        134,
+        160,
+        122,
+        87,
+        50,
+        3,
+        255,
+        81
+      ]
+    },
+    {
+      "name": "PoolPledged",
+      "discriminator": [
+        206,
+        194,
+        122,
+        76,
+        171,
+        144,
+        68,
+        51
+      ]
+    },
+    {
+      "name": "PoolReleased",
+      "discriminator": [
+        101,
+        111,
+        133,
+        222,
+        39,
+        212,
+        122,
+        58
+      ]
+    },
+    {
+      "name": "Repaid",
+      "discriminator": [
+        38,
+        248,
+        231,
+        7,
+        150,
+        164,
+        172,
+        23
+      ]
+    },
+    {
+      "name": "VerifierChanged",
+      "discriminator": [
+        53,
+        149,
+        64,
+        122,
+        147,
+        229,
+        17,
+        232
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotADbcAccount",
+      "msg": "Account is not owned by the Meteora bonding curve program"
+    },
+    {
+      "code": 6001,
+      "name": "UnexpectedAccountLayout",
+      "msg": "Meteora account layout does not match the version this program was built against"
+    }
+  ],
+  "types": [
+    {
+      "name": "BusinessRecord",
+      "docs": [
+        "Reputation. A count of what happened, never a score Float invented.",
+        "Field names match Float's existing `BusinessProfile` so one business keeps",
+        "one repayment history across Float's credit products."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "advances_taken",
+            "type": "u32"
+          },
+          {
+            "name": "advances_repaid",
+            "type": "u32"
+          },
+          {
+            "name": "advances_overdue",
+            "type": "u32"
+          },
+          {
+            "name": "total_volume_repaid",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessVerification",
+      "docs": [
+        "Identity. Only the verifier writes here, which is what keeps the credit",
+        "limit out of reach of every credit instruction."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified",
+            "type": "bool"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified_at",
+            "type": "i64"
+          },
+          {
+            "name": "verification_version",
+            "type": "u16"
+          },
+          {
+            "name": "kyb_reference",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessVerified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          },
+          {
+            "name": "verification_version",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Drawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "total_due",
+            "type": "u64"
+          },
+          {
+            "name": "margin_bps",
+            "type": "u16"
+          },
+          {
+            "name": "term_days",
+            "type": "u16"
+          },
+          {
+            "name": "projected_fees",
+            "type": "u64"
+          },
+          {
+            "name": "repayments_at_draw",
+            "type": "u32"
+          },
+          {
+            "name": "due_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeesCollected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "received",
+            "type": "u64"
+          },
+          {
+            "name": "collected_total",
+            "type": "u64"
+          },
+          {
+            "name": "total_due",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Loan",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "total_due",
+            "type": "u64"
+          },
+          {
+            "name": "collected",
+            "type": "u64"
+          },
+          {
+            "name": "margin_bps",
+            "type": "u16"
+          },
+          {
+            "name": "term_days",
+            "type": "u16"
+          },
+          {
+            "name": "projected_at_draw",
+            "type": "u64"
+          },
+          {
+            "name": "repayments_at_draw",
+            "type": "u32"
+          },
+          {
+            "name": "drawn_at",
+            "type": "i64"
+          },
+          {
+            "name": "due_at",
+            "type": "i64"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "LoanStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LoanStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Idle"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Repaid"
+          },
+          {
+            "name": "Defaulted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "observation_secs",
+            "type": "i64"
+          },
+          {
+            "name": "max_extrapolation_ratio",
+            "type": "u32"
+          },
+          {
+            "name": "advances_funded",
+            "type": "u64"
+          },
+          {
+            "name": "principal_outstanding",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "pool_authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Room to add fields without stranding the market PDA."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "observation_secs",
+            "type": "i64"
+          },
+          {
+            "name": "max_extrapolation_ratio",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PledgedPool",
+      "docs": [
+        "Collateral. The pool whose creator role Float is holding."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator_fee_pct",
+            "type": "u8"
+          },
+          {
+            "name": "baseline_trading_quote_fee",
+            "type": "u64"
+          },
+          {
+            "name": "pledged_at",
+            "type": "i64"
+          },
+          {
+            "name": "released",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolPledged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator_fee_pct",
+            "type": "u8"
+          },
+          {
+            "name": "baseline_trading_quote_fee",
+            "type": "u64"
+          },
+          {
+            "name": "pledged_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolReleased",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Repaid",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "total_due",
+            "type": "u64"
+          },
+          {
+            "name": "covered_by_fees",
+            "type": "u64"
+          },
+          {
+            "name": "topped_up",
+            "type": "u64"
+          },
+          {
+            "name": "was_late",
+            "type": "bool"
+          },
+          {
+            "name": "advances_repaid",
+            "type": "u32"
+          },
+          {
+            "name": "total_volume_repaid",
+            "type": "u64"
+          },
+          {
+            "name": "next_margin_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VerifierChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "previous",
+            "type": "pubkey"
+          },
+          {
+            "name": "current",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}
