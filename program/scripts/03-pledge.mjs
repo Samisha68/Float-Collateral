@@ -19,6 +19,7 @@ import {
 import { connection, wallet, readState, writeState, readPool, usd, HERE } from "./common.mjs";
 
 const OBSERVATION_SECS = Number(process.env.OBSERVATION_SECS || 60);
+const MAX_EXTRAPOLATION = Number(process.env.MAX_EXTRAPOLATION || 30);
 const CREDIT_LIMIT = new BN(10_000_000_000); // $10,000
 
 const payer = wallet();
@@ -36,9 +37,9 @@ const pool = new PublicKey(state.pool);
 const config = new PublicKey(state.dbcConfig);
 
 const seed = (...parts) => PublicKey.findProgramAddressSync(parts, PROGRAM_ID)[0];
-const market = seed(Buffer.from("market"));
+const market = seed(Buffer.from("market"), Buffer.from([2]));
 const poolAuthority = seed(Buffer.from("pool_authority"));
-const usdcVault = seed(Buffer.from("usdc_vault"));
+const usdcVault = seed(Buffer.from("usdc_vault"), Buffer.from([2]));
 const verification = seed(Buffer.from("verification"), payer.publicKey.toBuffer());
 const record = seed(Buffer.from("record"), payer.publicKey.toBuffer());
 const pledge = seed(Buffer.from("pledge"), pool.toBuffer());
@@ -52,9 +53,9 @@ console.log(`  dbc event auth  ${dbcEventAuthority.toBase58()}\n`);
 
 /* 1. Market. */
 if (!(await connection.getAccountInfo(market))) {
-  console.log(`init_market (observation window ${OBSERVATION_SECS}s)...`);
+  console.log(`init_market (window ${OBSERVATION_SECS}s, extrapolation cap ${MAX_EXTRAPOLATION}x)...`);
   const sig = await program.methods
-    .initMarket(new BN(OBSERVATION_SECS))
+    .initMarket(new BN(OBSERVATION_SECS), MAX_EXTRAPOLATION)
     .accounts({
       admin: payer.publicKey,
       market,

@@ -30,6 +30,10 @@ use dbc::{ConfigView, PoolView};
 declare_id!("EmadJs2c9bZKoncD2cirBGn7qdNWbFqaeYqPrM5LkG1f");
 
 pub const MARKET_SEED: &[u8] = b"market";
+/// Bumped when Market's layout changes, so an old account never has to be
+/// migrated in place. The `reserved` padding on Market exists so this should
+/// not need bumping again.
+pub const MARKET_VERSION: &[u8] = &[2];
 pub const POOL_AUTHORITY_SEED: &[u8] = b"pool_authority";
 pub const USDC_VAULT_SEED: &[u8] = b"usdc_vault";
 pub const VERIFICATION_SEED: &[u8] = b"verification";
@@ -52,23 +56,44 @@ pub mod float_credit {
 
     /// Stand up the market. Admin holds configuration; the verifier approves
     /// businesses; the USDC vault funds advances and receives repayments.
-    pub fn init_market(ctx: Context<InitMarket>, observation_secs: i64) -> Result<()> {
+    pub fn init_market(
+        ctx: Context<InitMarket>,
+        observation_secs: i64,
+        max_extrapolation_ratio: u32,
+    ) -> Result<()> {
         require!(observation_secs > 0, FloatError::InvalidObservationWindow);
+        require!(max_extrapolation_ratio > 0, FloatError::InvalidExtrapolationRatio);
         let market = &mut ctx.accounts.market;
         market.admin = ctx.accounts.admin.key();
         market.verifier = ctx.accounts.admin.key();
         market.usdc_mint = ctx.accounts.usdc_mint.key();
         market.usdc_vault = ctx.accounts.usdc_vault.key();
         market.observation_secs = observation_secs;
+        market.max_extrapolation_ratio = max_extrapolation_ratio;
         market.advances_funded = 0;
         market.principal_outstanding = 0;
         market.bump = ctx.bumps.market;
         market.pool_authority_bump = ctx.bumps.pool_authority;
+        market.reserved = [0u8; 64];
         emit!(MarketInitialized {
             admin: market.admin,
             usdc_mint: market.usdc_mint,
             observation_secs,
+            max_extrapolation_ratio,
         });
+        Ok(())
+    }
+
+    /// Tear the market down so it can be stood up again. Admin only, and only
+    /// once nothing is owed, so it can never be used to walk away from live
+    /// loans. This exists for devnet iteration and for resetting the demo
+    /// between runs; the README says as much.
+    pub fn close_market(ctx: Context<CloseMarket>) -> Result<()> {
+        require!(
+            ctx.accounts.market.principal_outstanding == 0,
+            FloatError::MarketHasOutstandingPrincipal
+        );
+        emit!(MarketClosed { admin: ctx.accounts.admin.key() });
         Ok(())
     }
 
@@ -247,6 +272,7 @@ pub mod float_credit {
             pledge.creator_fee_pct,
             elapsed,
             term_days,
+            ctx.accounts.market.max_extrapolation_ratio,
         )
         .ok_or(FloatError::MathOverflow)?;
         let required = (amount as u128)
@@ -473,18 +499,76 @@ pub fn project_creator_fees(
     creator_pct: u8,
     elapsed_secs: i64,
     term_days: u32,
+    max_extrapolation_ratio: u32,
 ) -> Option<u64> {
-    if elapsed_secs <= 0 || creator_pct == 0 {
+    if elapsed_secs <= 0 || creator_pct == 0 || max_extrapolation_ratio == 0 {
         return None;
     }
     let creator_share = (observed_gross as u128)
         .checked_mul(creator_pct as u128)?
         .checked_div(100)?;
+
+    // Straight-line extrapolation flatters a short window: an hour of frantic
+    // wash trading would otherwise project a month of it. Cap how far past the
+    // observed window the projection may reach, so buying a run rate costs as
+    // much as sustaining one.
     let term_secs = (term_days as u128).checked_mul(86_400)?;
+    let ceiling = (elapsed_secs as u128).checked_mul(max_extrapolation_ratio as u128)?;
+    let horizon = term_secs.min(ceiling);
+
     let projected = creator_share
-        .checked_mul(term_secs)?
+        .checked_mul(horizon)?
         .checked_div(elapsed_secs as u128)?;
     u64::try_from(projected).ok()
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::*;
+
+    const HOUR: i64 = 3_600;
+
+    #[test]
+    fn projects_a_run_rate_from_observed_accrual() {
+        // $128 gross over an hour, creator takes half, projected over 2 days
+        // with a generous cap: $64/hour * 48 hours.
+        let p = project_creator_fees(128_000_000, 50, HOUR, 2, 1_000).unwrap();
+        assert_eq!(p, 64_000_000 * 48);
+    }
+
+    #[test]
+    fn cap_limits_how_far_a_short_window_may_reach() {
+        // One hour observed, 30-day term, but the cap allows only 30x the
+        // window. The projection covers 30 hours, not 30 days.
+        let capped = project_creator_fees(128_000_000, 50, HOUR, 30, 30).unwrap();
+        assert_eq!(capped, 64_000_000 * 30);
+
+        let uncapped = project_creator_fees(128_000_000, 50, HOUR, 30, 1_000_000).unwrap();
+        assert!(uncapped > capped * 20, "cap must actually bite");
+    }
+
+    #[test]
+    fn cap_does_not_penalise_a_window_longer_than_the_term() {
+        // A week observed, a one-day term: the term is the binding constraint,
+        // so the cap changes nothing.
+        let week = HOUR * 24 * 7;
+        let a = project_creator_fees(700_000_000, 50, week, 1, 30).unwrap();
+        let b = project_creator_fees(700_000_000, 50, week, 1, 1_000_000).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn refuses_degenerate_inputs() {
+        assert!(project_creator_fees(1_000, 50, 0, 30, 30).is_none(), "zero window");
+        assert!(project_creator_fees(1_000, 50, -1, 30, 30).is_none(), "negative window");
+        assert!(project_creator_fees(1_000, 0, HOUR, 30, 30).is_none(), "no creator share");
+        assert!(project_creator_fees(1_000, 50, HOUR, 30, 0).is_none(), "zero cap");
+    }
+
+    #[test]
+    fn a_pool_that_earned_nothing_projects_nothing() {
+        assert_eq!(project_creator_fees(0, 50, HOUR, 30, 30), Some(0));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -499,7 +583,7 @@ pub struct InitMarket<'info> {
         init,
         payer = admin,
         space = Market::LEN,
-        seeds = [MARKET_SEED],
+        seeds = [MARKET_SEED, MARKET_VERSION],
         bump
     )]
     pub market: Account<'info, Market>,
@@ -513,7 +597,7 @@ pub struct InitMarket<'info> {
         token::mint = usdc_mint,
         token::authority = market,
         token::token_program = token_program,
-        seeds = [USDC_VAULT_SEED],
+        seeds = [USDC_VAULT_SEED, MARKET_VERSION],
         bump
     )]
     pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
@@ -522,10 +606,23 @@ pub struct InitMarket<'info> {
 }
 
 #[derive(Accounts)]
+pub struct CloseMarket<'info> {
+    #[account(mut, address = market.admin @ FloatError::Unauthorized)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [MARKET_SEED, MARKET_VERSION],
+        bump = market.bump,
+        close = admin
+    )]
+    pub market: Account<'info, Market>,
+}
+
+#[derive(Accounts)]
 pub struct SetVerifier<'info> {
     #[account(address = market.admin @ FloatError::Unauthorized)]
     pub admin: Signer<'info>,
-    #[account(mut, seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
 }
 
@@ -533,7 +630,7 @@ pub struct SetVerifier<'info> {
 pub struct VerifyBusiness<'info> {
     #[account(mut, address = market.verifier @ FloatError::Unauthorized)]
     pub verifier: Signer<'info>,
-    #[account(seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     /// CHECK: the business being approved; identified by key only.
     pub borrower: UncheckedAccount<'info>,
@@ -560,7 +657,7 @@ pub struct VerifyBusiness<'info> {
 pub struct PledgePool<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
-    #[account(seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(
         seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
@@ -596,7 +693,7 @@ pub struct PledgePool<'info> {
 pub struct Borrow<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
-    #[account(mut, seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(
         seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
@@ -630,7 +727,7 @@ pub struct Borrow<'info> {
     pub virtual_pool: UncheckedAccount<'info>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, seeds = [USDC_VAULT_SEED], bump)]
+    #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
     pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(
         mut,
@@ -647,7 +744,7 @@ pub struct CollectFees<'info> {
     /// Anyone may push collection forward.
     #[account(mut)]
     pub cranker: Signer<'info>,
-    #[account(seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(
         seeds = [PLEDGE_SEED, virtual_pool.key().as_ref()],
@@ -681,7 +778,7 @@ pub struct CollectFees<'info> {
     pub float_base_account: UncheckedAccount<'info>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, seeds = [USDC_VAULT_SEED], bump)]
+    #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
     pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
     /// CHECK: token program owning the base mint.
     pub token_base_program: UncheckedAccount<'info>,
@@ -697,7 +794,7 @@ pub struct CollectFees<'info> {
 pub struct Repay<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
-    #[account(mut, seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(
         mut,
@@ -714,7 +811,7 @@ pub struct Repay<'info> {
     pub loan: Account<'info, Loan>,
     #[account(address = market.usdc_mint @ FloatError::WrongMint)]
     pub usdc_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, seeds = [USDC_VAULT_SEED], bump)]
+    #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
     pub usdc_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(
         mut,
@@ -729,7 +826,7 @@ pub struct Repay<'info> {
 pub struct ReleasePool<'info> {
     #[account(mut)]
     pub borrower: Signer<'info>,
-    #[account(seeds = [MARKET_SEED], bump = market.bump)]
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(
         mut,
@@ -769,13 +866,16 @@ pub struct Market {
     pub usdc_mint: Pubkey,
     pub usdc_vault: Pubkey,
     pub observation_secs: i64,
+    pub max_extrapolation_ratio: u32,
     pub advances_funded: u64,
     pub principal_outstanding: u64,
     pub bump: u8,
     pub pool_authority_bump: u8,
+    /// Room to add fields without stranding the market PDA.
+    pub reserved: [u8; 64],
 }
 impl Market {
-    pub const LEN: usize = 8 + 32 * 4 + 8 + 8 + 8 + 1 + 1;
+    pub const LEN: usize = 8 + 32 * 4 + 8 + 4 + 8 + 8 + 1 + 1 + 64;
 }
 
 /// Identity. Only the verifier writes here, which is what keeps the credit
@@ -867,6 +967,12 @@ pub struct MarketInitialized {
     pub admin: Pubkey,
     pub usdc_mint: Pubkey,
     pub observation_secs: i64,
+    pub max_extrapolation_ratio: u32,
+}
+
+#[event]
+pub struct MarketClosed {
+    pub admin: Pubkey,
 }
 
 #[event]
@@ -947,6 +1053,8 @@ pub enum FloatError {
     Unauthorized,
     #[msg("Observation window must be greater than zero")]
     InvalidObservationWindow,
+    #[msg("Extrapolation ratio must be greater than zero")]
+    InvalidExtrapolationRatio,
     #[msg("Approved credit limit must be greater than zero")]
     InvalidCreditLimit,
     #[msg("This business has not been verified")]
@@ -999,6 +1107,8 @@ pub enum FloatError {
     WrongTokenOwner,
     #[msg("Not the Meteora bonding curve program")]
     WrongDbcProgram,
+    #[msg("The market still has principal outstanding")]
+    MarketHasOutstandingPrincipal,
     #[msg("Arithmetic overflow")]
     MathOverflow,
 }
