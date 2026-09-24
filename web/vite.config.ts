@@ -1,22 +1,20 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
-// Anchor and web3.js reach for Node globals. Point "buffer" at the npm package
-// rather than letting Vite externalise it, which leaves Buffer undefined at
-// runtime in a production build even when the dev server appears to work.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { buffer: "buffer/" },
+    alias: {
+      // Anchor and web3.js reach for Node's Buffer.
+      buffer: "buffer/",
+      "@": path.resolve(__dirname, "./src"),
+    },
     // The wallet adapter packages each depend on React. Without deduping, Vite
     // serves more than one copy and every hook call throws.
     dedupe: ["react", "react-dom"],
   },
-  define: {
-    "process.env": {},
-    global: "globalThis",
-  },
-  optimizeDeps: {
-    include: ["buffer"],
-  },
+  define: { "process.env": {}, global: "globalThis" },
+  optimizeDeps: { include: ["buffer"] },
 });

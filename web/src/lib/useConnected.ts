@@ -17,9 +17,12 @@ export type Stage =
   | "ready"        // pledged, can draw
   | "drawn";       // a loan is open
 
+export type Market = Awaited<ReturnType<typeof getFloatAccounts>>["market"];
+
 export type Position = {
   wallet: PublicKey;
   stage: Stage;
+  market: Market;
   verification: Verification | null;
   record: Record_;
   pledge: Pledge | null;
@@ -67,7 +70,7 @@ export function useConnected() {
         ]);
         if (!live) return;
 
-        const { verification, record, pledge, loan } = accounts;
+        const { market, verification, record, pledge, loan } = accounts;
         let observedSecs = 0;
         let observedCreatorFees = 0n;
         if (pool && pledge) {
@@ -83,7 +86,7 @@ export function useConnected() {
           : "unpledged";
 
         setPosition({
-          wallet: publicKey, stage, verification, record, pledge, loan, pool,
+          wallet: publicKey, stage, market, verification, record, pledge, loan, pool,
           poolAddress, observedSecs, observedCreatorFees,
         });
       } finally {

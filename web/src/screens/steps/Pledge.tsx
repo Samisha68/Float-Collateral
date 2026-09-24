@@ -7,14 +7,17 @@
 
 import { useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
-import { Block, Key } from "../../components/ui";
-import * as act from "../../lib/actions";
-import { Outcome } from "../Journey";
-import type { Position } from "../../lib/useConnected";
+import { Link2, Loader2, Search, CircleAlert, CircleCheck } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { KeyLink } from "@/components/ui-kit";
+import { Note, Outcome } from "../Journey";
+import * as act from "@/lib/actions";
 
 export default function Pledge({
   wallet, send, onDone,
-}: { wallet: PublicKey; send: act.SendFn; onDone: () => void; position: Position }) {
+}: { wallet: PublicKey; send: act.SendFn; onDone: () => void }) {
   const [address, setAddress] = useState("");
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<act.PoolCheck | null>(null);
@@ -24,11 +27,8 @@ export default function Pledge({
 
   const verify = async () => {
     setChecking(true); setCheck(null); setError(null);
-    try {
-      setCheck(await act.checkPool(address, wallet));
-    } finally {
-      setChecking(false);
-    }
+    try { setCheck(await act.checkPool(address, wallet)); }
+    finally { setChecking(false); }
   };
 
   const pledge = async () => {
@@ -39,57 +39,62 @@ export default function Pledge({
       onDone();
     } catch (e: any) {
       setError(e?.error?.errorMessage || e?.message || String(e));
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
   return (
-    <Block title="Pledge a fee stream">
-      <p>
-        Float lends against the trading fees your Meteora pool earns you. To secure a loan you
-        hand Float the pool's <strong>creator role</strong>, which is the authority Meteora
-        requires to claim those fees.
-      </p>
-      <p className="note">
-        While it is pledged you cannot claim your pool's fees and Float can. Nothing else about
-        the pool changes: it keeps trading, you keep its tokens, and the role comes back to you
-        when the loan is repaid.
-      </p>
+    <Card className="shadow-none">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Link2 className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
+          <CardTitle className="text-[16px]">Pledge a fee stream</CardTitle>
+        </div>
+        <CardDescription className="text-[13.5px] leading-relaxed">
+          Float lends against the trading fees your Meteora pool earns you. To secure a loan you
+          hand Float the pool's <strong className="font-medium text-foreground">creator role</strong>,
+          the authority Meteora requires to claim those fees.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <Note>
+          While it is pledged you cannot claim your pool's fees and Float can. Nothing else
+          changes: it keeps trading, you keep its tokens, and the role returns to you when the
+          loan is repaid.
+        </Note>
 
-      <div className="ask" style={{ marginTop: "1.75rem" }}>
-        <label className="field grow">
-          <span>Your pool address on devnet</span>
-          <input
-            type="text"
-            className="wide mono-input"
-            value={address}
-            onChange={(e) => { setAddress(e.target.value); setCheck(null); }}
-            placeholder="3svMNFGD4XC11Lf6K1Mq4aEGS5LjfbU1AYa9BagXAXX4"
-          />
-        </label>
-        <button className="action" disabled={!address.trim() || checking} onClick={verify}>
-          {checking ? "Checking…" : "Check pool"}
-        </button>
-      </div>
-
-      {check && !check.ok && <p className="note outcome">{check.reason}</p>}
-
-      {check?.ok && (
-        <>
-          <p className="note outcome">
-            This pool is yours, it trades, it is quoted in USDC, and it pays you{" "}
-            {check.creatorFeePct}% of its trading fees. <Key value={check.pool.toBase58()} />
-          </p>
-          <div className="actions">
-            <button className="action primary" disabled={busy} onClick={pledge}>
-              {busy ? "Pledging…" : "Pledge this pool to Float"}
-            </button>
+        <div className="space-y-1.5">
+          <label className="text-[12.5px] text-muted-foreground">Your pool address on devnet</label>
+          <div className="flex gap-2">
+            <Input
+              value={address}
+              onChange={(e) => { setAddress(e.target.value); setCheck(null); }}
+              placeholder="3svMNFGD4XC11Lf6K1Mq4aEGS5LjfbU1AYa9BagXAXX4"
+              className="font-mono text-[12.5px]"
+            />
+            <Button variant="outline" disabled={!address.trim() || checking} onClick={verify}>
+              {checking ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" strokeWidth={1.75} />}
+              Check
+            </Button>
           </div>
-        </>
-      )}
+        </div>
 
-      <Outcome error={error} done={done} />
-    </Block>
+        {check && !check.ok && <Note icon={CircleAlert}>{check.reason}</Note>}
+
+        {check?.ok && (
+          <>
+            <Note icon={CircleCheck}>
+              This pool is yours, it trades, it is quoted in USDC, and it pays you{" "}
+              {check.creatorFeePct}% of its trading fees. <KeyLink value={check.pool.toBase58()} />
+            </Note>
+            <Button size="lg" disabled={busy} onClick={pledge}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" strokeWidth={1.75} />}
+              Pledge this pool to Float
+            </Button>
+          </>
+        )}
+
+        <Outcome error={error} done={done} />
+      </CardContent>
+    </Card>
   );
 }
