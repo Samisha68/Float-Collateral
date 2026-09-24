@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verifier": "node server/index.mjs",
+    "dev:all": "node server/index.mjs & vite"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
@@ -22,6 +24,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^24.13.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

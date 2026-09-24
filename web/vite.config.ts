@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: { buffer: "buffer/" },
+    // The wallet adapter packages each depend on React. Without deduping, Vite
+    // serves more than one copy and every hook call throws.
+    dedupe: ["react", "react-dom"],
   },
   define: {
     "process.env": {},

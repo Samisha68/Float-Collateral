@@ -1,26 +1,23 @@
 import { useState } from "react";
+import Journey from "./screens/Journey";
 import Compare from "./screens/Compare";
-import Account from "./screens/Account";
-import Draw from "./screens/Draw";
 import About from "./screens/About";
 import { Key } from "./components/ui";
-import { BORROWERS, useBorrower, type Borrower } from "./lib/useBorrower";
+import { ConnectButton } from "./wallet";
+import { useConnected } from "./lib/useConnected";
 import { config } from "./lib/chain";
 
-type Tab = "compare" | "account" | "draw" | "about";
+type Tab = "journey" | "compare" | "about";
 
 const TABS: [Tab, string][] = [
-  ["compare", "The argument"],
-  ["account", "Credit account"],
-  ["draw", "Draw"],
+  ["journey", "Your account"],
+  ["compare", "Why terms differ"],
   ["about", "How this works"],
 ];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("compare");
-  const [borrower, setBorrower] = useState<Borrower>(BORROWERS[1]);
-  const { state, error } = useBorrower(borrower);
-  const perBusiness = tab === "account" || tab === "draw";
+  const [tab, setTab] = useState<Tab>("journey");
+  const { position, loading, refresh } = useConnected();
 
   return (
     <div className="shell">
@@ -33,42 +30,20 @@ export default function App() {
             </button>
           ))}
         </nav>
-
-        {perBusiness && (
-          <div className="rail-group">
-            <div className="rail-label">Business</div>
-            <nav>
-              {BORROWERS.map((b) => (
-                <button
-                  key={b.key}
-                  aria-current={b.wallet === borrower.wallet}
-                  onClick={() => setBorrower(b)}
-                >
-                  {b.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-        )}
-
+        <div className="rail-group">
+          <ConnectButton />
+        </div>
       </aside>
 
       <main>
+        {tab === "journey" && <Journey position={position} loading={loading} refresh={refresh} />}
         {tab === "compare" && <Compare />}
         {tab === "about" && <About />}
-        {perBusiness && (
-          <>
-            {error && <p className="note">Could not read devnet. {error}</p>}
-            {!error && !state && <p className="spinner">Reading {borrower.label} from devnet…</p>}
-            {state && tab === "account" && <Account s={state} />}
-            {state && tab === "draw" && <Draw s={state} />}
-          </>
-        )}
       </main>
 
       <footer className="colophon">
         <strong>Devnet.</strong> No real money moves. The USDC is a test mint Float controls and
-        the pool is one we launched. Program <Key value={config.programId} />.
+        verification is done by Float's own key. Program <Key value={config.programId} />.
       </footer>
     </div>
   );
