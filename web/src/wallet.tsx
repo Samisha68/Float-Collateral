@@ -9,9 +9,12 @@ import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-ad
 import { WalletModalProvider, useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Wallet as WalletIcon, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+/* The adapter's own stylesheet is deliberately NOT imported. It is a dark
+   theme carrying a purple accent and a Google Fonts download, and forcing it
+   light left the modal title white on white. Float styles the modal itself,
+   in index.css. */
 import { RPC } from "@/lib/chain";
 import { shortKey } from "@/lib/format";
-import "@solana/wallet-adapter-react-ui/styles.css";
 
 export function Wallet({ children }: { children: ReactNode }) {
   const endpoint = useMemo(() => RPC, []);
@@ -29,7 +32,7 @@ export function WalletChip() {
   const { publicKey } = useWallet();
   if (!publicKey) return null;
   return (
-    <span className="hidden rounded-md border bg-muted/50 px-2.5 py-1 font-mono text-[11.5px] text-muted-foreground sm:inline">
+    <span className="hidden rounded-md border bg-muted/50 px-2.5 py-1 font-mono text-micro text-muted-foreground sm:inline">
       {shortKey(publicKey.toBase58())}
     </span>
   );
@@ -41,7 +44,7 @@ export function ConnectButton({ size = "sm" }: { size?: "sm" | "lg" }) {
 
   if (connecting)
     return (
-      <Button size={size === "lg" ? "lg" : "sm"} disabled>
+      <Button size={size === "lg" ? "lg" : "sm"} className="min-h-11" disabled>
         <WalletIcon className="size-4" strokeWidth={1.75} />
         Connecting…
       </Button>
@@ -49,14 +52,14 @@ export function ConnectButton({ size = "sm" }: { size?: "sm" | "lg" }) {
 
   if (publicKey)
     return (
-      <Button variant="outline" size="sm" onClick={() => disconnect()}>
+      <Button variant="outline" size="sm" className="min-h-11" onClick={() => disconnect()}>
         <LogOut className="size-4" strokeWidth={1.75} />
         Disconnect
       </Button>
     );
 
   return (
-    <Button size={size === "lg" ? "lg" : "sm"} onClick={() => setVisible(true)}>
+    <Button size={size === "lg" ? "lg" : "sm"} className="min-h-11" onClick={() => setVisible(true)}>
       <WalletIcon className="size-4" strokeWidth={1.75} />
       Connect wallet
     </Button>

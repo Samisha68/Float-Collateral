@@ -15,11 +15,11 @@ export function Headline({
 }: { value: ReactNode; label: ReactNode; sub?: ReactNode }) {
   return (
     <div>
-      <div className="tabular text-[40px] font-semibold leading-none tracking-[-0.035em]">
+      <div className="tabular text-figure font-semibold leading-none tracking-[-0.035em]">
         {value}
       </div>
-      <div className="mt-2 text-[13.5px] text-muted-foreground">{label}</div>
-      {sub && <div className="mt-1 text-[12.5px] text-muted-foreground">{sub}</div>}
+      <div className="mt-2 text-meta text-muted-foreground">{label}</div>
+      {sub && <div className="mt-1 text-caption text-muted-foreground">{sub}</div>}
     </div>
   );
 }
@@ -30,8 +30,8 @@ export function Stats({ items }: { items: { value: ReactNode; label: ReactNode }
     <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
       {items.map((it, i) => (
         <div key={i}>
-          <div className="tabular text-[20px] font-semibold tracking-tight">{it.value}</div>
-          <div className="mt-0.5 text-[12px] text-muted-foreground">{it.label}</div>
+          <div className="tabular text-stat font-semibold tracking-tight">{it.value}</div>
+          <div className="mt-0.5 text-caption text-muted-foreground">{it.label}</div>
         </div>
       ))}
     </div>
@@ -44,8 +44,8 @@ export function Rows({ items }: { items: [ReactNode, ReactNode][] }) {
     <dl className="divide-y">
       {items.map(([k, v], i) => (
         <div key={i} className="flex items-baseline justify-between gap-6 py-2.5 first:pt-0 last:pb-0">
-          <dt className="text-[13.5px] text-muted-foreground">{k}</dt>
-          <dd className="tabular text-right text-[13.5px] font-medium">{v}</dd>
+          <dt className="text-meta text-muted-foreground">{k}</dt>
+          <dd className="tabular text-right text-meta font-medium">{v}</dd>
         </div>
       ))}
     </dl>
@@ -59,7 +59,7 @@ export function StatusWord({
   return (
     <Badge
       variant={solid ? "default" : "outline"}
-      className={cn("rounded-full px-2 py-0 text-[10.5px] font-medium uppercase tracking-[0.08em]")}
+      className={cn("rounded-full px-2 py-0 text-micro font-medium uppercase tracking-[0.08em]")}
     >
       {children}
     </Badge>
@@ -74,7 +74,7 @@ export function KeyLink({
       href={explorer(value, kind)}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 font-mono text-[12px] underline decoration-border underline-offset-[3px] transition-colors hover:decoration-foreground"
+      className="inline-flex items-center gap-1 font-mono text-caption underline decoration-border underline-offset-[3px] transition-colors hover:decoration-foreground"
     >
       {full ? value : shortKey(value)}
       <ExternalLink className="size-3 shrink-0" strokeWidth={1.75} />

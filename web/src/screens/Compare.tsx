@@ -59,19 +59,19 @@ export default function Compare() {
 
   const row = (label: string, l: React.ReactNode, r: React.ReactNode, lead = false) => (
     <TableRow>
-      <TableCell className="text-[13.5px] text-muted-foreground">{label}</TableCell>
-      <TableCell className={`tabular text-right text-[13.5px] ${lead ? "font-semibold" : ""}`}>{l}</TableCell>
-      <TableCell className={`tabular text-right text-[13.5px] ${lead ? "font-semibold" : ""}`}>{r}</TableCell>
+      <TableCell className="text-meta text-muted-foreground">{label}</TableCell>
+      <TableCell className={`tabular text-right text-meta ${lead ? "font-semibold" : ""}`}>{l}</TableCell>
+      <TableCell className={`tabular text-right text-meta ${lead ? "font-semibold" : ""}`}>{r}</TableCell>
     </TableRow>
   );
 
   return (
     <div className="space-y-8">
       <div className="space-y-4">
-        <h2 className="max-w-[18ch] text-[32px] font-semibold leading-[1.15] tracking-[-0.03em]">
+        <h2 className="max-w-[18ch] text-display font-semibold leading-[1.15] tracking-[-0.03em]">
           Same credit limit. Different history. Different terms.
         </h2>
-        <p className="max-w-[56ch] text-[15px] leading-relaxed text-muted-foreground">
+        <p className="max-w-[56ch] text-body leading-relaxed text-muted-foreground">
           Two verified businesses, each approved for {usd(a.limit, { cents: false })}. One has
           never borrowed. The other has repaid six times. Float will not lend the second a penny
           more, and it will charge it considerably less.
@@ -84,8 +84,8 @@ export default function Compare() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[42%]" />
-                <TableHead className="text-right text-[11px] uppercase tracking-[0.08em]">{a.label}</TableHead>
-                <TableHead className="text-right text-[11px] uppercase tracking-[0.08em]">{b.label}</TableHead>
+                <TableHead className="text-right text-micro uppercase tracking-[0.08em]">{a.label}</TableHead>
+                <TableHead className="text-right text-micro uppercase tracking-[0.08em]">{b.label}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -113,11 +113,11 @@ export default function Compare() {
                 {row("Annualised", annualised(rateBps(TERM, a.repaid), TERM), annualised(rateBps(TERM, b.repaid), TERM))}
               </TableBody>
             </Table>
-            <p className="text-[16px] leading-relaxed">
+            <p className="text-lead leading-relaxed">
               The record moved the terms by <strong className="font-semibold">{usd(diff)}</strong> of
               coverage. It moved the limit by nothing.
             </p>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
+            <p className="text-meta leading-relaxed text-muted-foreground">
               That is not a convention the code politely observes. The approved limit lives on an
               account only the verifier may write, and the record on an account only the credit
               instructions may write. No credit instruction can reach the limit.
@@ -130,15 +130,15 @@ export default function Compare() {
         <SectionHeading>Read it yourself</SectionHeading>
         <Card className="shadow-none">
           <CardContent className="space-y-3 pt-6">
-            <div className="flex items-center justify-between gap-4 text-[13.5px]">
+            <div className="flex items-center justify-between gap-4 text-meta">
               <span className="text-muted-foreground">{a.label}</span>
               <KeyLink value={a.wallet} />
             </div>
-            <div className="flex items-center justify-between gap-4 text-[13.5px]">
+            <div className="flex items-center justify-between gap-4 text-meta">
               <span className="text-muted-foreground">{b.label}</span>
               <KeyLink value={b.wallet} />
             </div>
-            <p className="pt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+            <p className="pt-1 text-caption leading-relaxed text-muted-foreground">
               Both columns are read live from devnet. The {b.repaid} repayments on the right are{" "}
               {b.repaid} separate borrow and repay transactions against this program.
             </p>

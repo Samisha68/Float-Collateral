@@ -56,6 +56,31 @@
 @theme inline {
   --font-sans: Poppins, system-ui, sans-serif;
 
+  /* A type scale, named.
+     Before this there were ten sizes between 11px and 16px (11, 11.5, 12,
+     12.5, 13, 13.5, 14, 15, 16), which is not a scale, it is drift. Every one
+     was an arbitrary value written inline, so nothing could be reasoned about
+     or changed in one place. Nine steps, each with a job, each reachable by
+     name. */
+  --text-micro: 0.6875rem;   /* 11px  uppercase eyebrows, legal */
+  --text-micro--line-height: 1.45;
+  --text-caption: 0.75rem;   /* 12px  meta, hints under fields */
+  --text-caption--line-height: 1.5;
+  --text-meta: 0.8125rem;    /* 13px  secondary prose, table labels */
+  --text-meta--line-height: 1.6;
+  --text-body: 0.875rem;     /* 14px  interface default */
+  --text-body--line-height: 1.6;
+  --text-lead: 1rem;         /* 16px  the sentence under a headline */
+  --text-lead--line-height: 1.65;
+  --text-stat: 1.25rem;      /* 20px  supporting figures */
+  --text-stat--line-height: 1.2;
+  --text-title: 1.5rem;      /* 24px  card and section titles */
+  --text-title--line-height: 1.25;
+  --text-display: 2rem;      /* 32px  page headlines */
+  --text-display--line-height: 1.15;
+  --text-figure: 2.5rem;     /* 40px  the one number a screen is built on */
+  --text-figure--line-height: 1.05;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -84,10 +109,13 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* DESIGN.md permits corners of 6, 10 or 14px and nothing else. shadcn's
+     default ladder derives from --radius by subtraction and produced 8px,
+     which is not one of them. Pinned to the three allowed values. */
+  --radius-sm: 0.375rem;  /* 6px  */
+  --radius-md: 0.625rem;  /* 10px */
+  --radius-lg: 0.625rem;  /* 10px */
+  --radius-xl: 0.875rem;  /* 14px */
 }
 
 @layer base {
@@ -107,23 +135,130 @@
   }
 }
 
-/* The wallet adapter ships a modal with its own typography. */
-.wallet-adapter-modal-wrapper,
-.wallet-adapter-modal-wrapper * {
-  font-family: Poppins, system-ui, sans-serif !important;
+/* The wallet modal, styled by Float.
+
+   The adapter's stylesheet is not imported (see wallet.tsx). It is a dark
+   theme, so forcing it onto a white surface left the title white on white and
+   the empty state showing a pastel gradient. This is the first thing a new
+   visitor sees, so it gets the same rules as everything else: monochrome,
+   Poppins, words rather than colour. */
+
+.wallet-adapter-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease-out;
+}
+.wallet-adapter-modal.wallet-adapter-modal-fade-in {
+  opacity: 1;
+  pointer-events: auto;
+}
+.wallet-adapter-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklch, var(--foreground) 45%, transparent);
+}
+.wallet-adapter-modal-container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  max-width: 24rem;
+  padding: 1rem;
 }
 .wallet-adapter-modal-wrapper {
-  background: var(--background) !important;
-  color: var(--foreground) !important;
-  border-radius: var(--radius) !important;
+  position: relative;
+  width: 100%;
+  padding: 1.5rem;
+  font-family: Poppins, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+.wallet-adapter-modal-title {
+  margin: 0 2.5rem 1.25rem 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
 }
 .wallet-adapter-modal-button-close {
-  background: var(--muted) !important;
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  cursor: pointer;
+  background: var(--muted);
+  border: 0;
+  border-radius: var(--radius-sm);
 }
-.wallet-adapter-modal-list li button {
-  background: var(--secondary) !important;
-  color: var(--foreground) !important;
+.wallet-adapter-modal-button-close svg { width: 0.75rem; height: 0.75rem; fill: var(--muted-foreground); }
+.wallet-adapter-modal-button-close:hover svg { fill: var(--foreground); }
+
+.wallet-adapter-modal-list { margin: 0; padding: 0; list-style: none; }
+.wallet-adapter-modal-list li { margin-bottom: 0.375rem; }
+.wallet-adapter-modal-list li button,
+.wallet-adapter-button {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: background-color 150ms ease-out;
 }
+.wallet-adapter-modal-list li button:hover,
+.wallet-adapter-button:hover { background: var(--accent); }
+.wallet-adapter-modal-list li button img,
+.wallet-adapter-button-start-icon img { width: 1.25rem; height: 1.25rem; }
+.wallet-adapter-modal-list .wallet-adapter-modal-list-more-icon-rotate { display: none; }
+
+/* The "no wallet detected" empty state. Its illustration is a pastel gradient,
+   which has no place in a monochrome interface. */
+.wallet-adapter-modal-middle { padding-top: 0.5rem; text-align: left; }
+.wallet-adapter-modal-middle svg { filter: grayscale(1); opacity: 0.35; max-width: 6rem; height: auto; }
+.wallet-adapter-modal-middle-button,
+.wallet-adapter-modal-list-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 1.25rem;
+  padding: 0.625rem 1rem;
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--primary-foreground);
+  cursor: pointer;
+  background: var(--primary);
+  border: 0;
+  border-radius: var(--radius-md);
+}
+.wallet-adapter-modal-list-more {
+  color: var(--muted-foreground);
+  background: none;
+  padding-left: 0;
+}
+.wallet-adapter-modal-list-more svg { fill: var(--muted-foreground); }
+.wallet-adapter-modal-list-more:hover { color: var(--foreground); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

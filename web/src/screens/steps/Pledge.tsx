@@ -47,9 +47,9 @@ export default function Pledge({
       <CardHeader>
         <div className="flex items-center gap-2">
           <Link2 className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-          <CardTitle className="text-[16px]">Pledge a fee stream</CardTitle>
+          <CardTitle className="text-lead">Pledge a fee stream</CardTitle>
         </div>
-        <CardDescription className="text-[13.5px] leading-relaxed">
+        <CardDescription className="text-meta leading-relaxed">
           Float lends against the trading fees your Meteora pool earns you. To secure a loan you
           hand Float the pool's <strong className="font-medium text-foreground">creator role</strong>,
           the authority Meteora requires to claim those fees.
@@ -63,13 +63,13 @@ export default function Pledge({
         </Note>
 
         <div className="space-y-1.5">
-          <label className="text-[12.5px] text-muted-foreground">Your pool address on devnet</label>
+          <label className="text-caption text-muted-foreground">Your pool address on devnet</label>
           <div className="flex gap-2">
             <Input
               value={address}
               onChange={(e) => { setAddress(e.target.value); setCheck(null); }}
               placeholder="3svMNFGD4XC11Lf6K1Mq4aEGS5LjfbU1AYa9BagXAXX4"
-              className="font-mono text-[12.5px]"
+              className="font-mono text-caption"
             />
             <Button variant="outline" disabled={!address.trim() || checking} onClick={verify}>
               {checking ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" strokeWidth={1.75} />}

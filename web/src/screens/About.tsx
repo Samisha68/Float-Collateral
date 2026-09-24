@@ -25,10 +25,10 @@ export default function About() {
   return (
     <div className="space-y-8">
       <div className="space-y-4">
-        <h2 className="max-w-[20ch] text-[32px] font-semibold leading-[1.15] tracking-[-0.03em]">
+        <h2 className="max-w-[20ch] text-display font-semibold leading-[1.15] tracking-[-0.03em]">
           Credit against revenue that has not arrived yet.
         </h2>
-        <p className="max-w-[56ch] text-[15px] leading-relaxed text-muted-foreground">
+        <p className="max-w-[56ch] text-body leading-relaxed text-muted-foreground">
           A business that launched a token on Meteora earns trading fees as its pool trades. Those
           fees arrive slowly. Payroll does not. Float lends against the stream and takes the claim
           on it as security, so the fees repay the loan at source rather than on a promise.
@@ -43,8 +43,8 @@ export default function About() {
               <CardContent className="flex gap-3 pt-6">
                 <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                 <div>
-                  <div className="text-[14px] font-medium">{t}</div>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{d}</p>
+                  <div className="text-body font-medium">{t}</div>
+                  <p className="mt-0.5 text-meta leading-relaxed text-muted-foreground">{d}</p>
                 </div>
               </CardContent>
             </Card>
@@ -56,17 +56,17 @@ export default function About() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Lock className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-            <CardTitle className="text-[16px]">Why the pledge is a lock, not a promise</CardTitle>
+            <CardTitle className="text-lead">Why the pledge is a lock, not a promise</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-[14px] leading-relaxed">
+          <p className="text-body leading-relaxed">
             Float never holds the pool's tokens. It holds the pool's{" "}
             <em className="not-italic font-medium">creator role</em>, which is the authority
             Meteora requires to claim creator trading fees. Once that role has moved, the business
             cannot claim its own pool's fees. Meteora refuses it.
           </p>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">
+          <p className="text-meta leading-relaxed text-muted-foreground">
             That refusal is a test in the repository, not a claim in a deck. The borrower attempts
             the claim on a pledged pool, and the transaction fails.
           </p>
@@ -75,8 +75,8 @@ export default function About() {
 
       <Card className="shadow-none">
         <CardHeader>
-          <CardTitle className="text-[16px]">There is no oracle</CardTitle>
-          <CardDescription className="text-[13.5px] leading-relaxed">
+          <CardTitle className="text-lead">There is no oracle</CardTitle>
+          <CardDescription className="text-meta leading-relaxed">
             Float underwrites pools quoted in USDC and nothing else. The fees accrue in the same
             unit as the debt, so there is no price to fetch, no feed to trust and no staleness to
             handle. A SOL-quoted pool would need all three, which is why this version declines them.

@@ -52,7 +52,7 @@ function Progress({ stage }: { stage: Stage }) {
           <li key={label} className="flex items-center gap-1">
             <div
               className={cn(
-                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-caption transition-colors",
                 now && "border-foreground bg-foreground font-medium text-background",
                 done && "border-border text-foreground",
                 !now && !done && "border-border/70 text-muted-foreground",
@@ -83,17 +83,17 @@ export default function Journey({
     return (
       <div className="space-y-8">
         <div className="space-y-5">
-          <h2 className="max-w-[17ch] text-[36px] font-semibold leading-[1.12] tracking-[-0.03em]">
+          <h2 className="max-w-[17ch] text-display font-semibold leading-[1.12] tracking-[-0.03em]">
             Turn the fees your token already earns into working capital.
           </h2>
-          <p className="max-w-[54ch] text-[16px] leading-relaxed text-muted-foreground">
+          <p className="max-w-[54ch] text-lead leading-relaxed text-muted-foreground">
             If you launched a token on Meteora, your pool pays you a share of every trade. Float
             lends USDC against that stream and takes the claim on it as security, so the fees
             repay the loan at source. Repay, and your next loan costs less.
           </p>
           <div className="flex items-center gap-3 pt-1">
             <ConnectButton size="lg" />
-            <span className="text-[12.5px] text-muted-foreground">
+            <span className="text-caption text-muted-foreground">
               Devnet · any Solana wallet
             </span>
           </div>
@@ -110,8 +110,8 @@ export default function Journey({
             <Card key={t} className="shadow-none">
               <CardContent className="space-y-2 pt-6">
                 <Icon className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-                <div className="text-[14px] font-medium">{t}</div>
-                <p className="text-[13px] leading-relaxed text-muted-foreground">{d}</p>
+                <div className="text-body font-medium">{t}</div>
+                <p className="text-meta leading-relaxed text-muted-foreground">{d}</p>
               </CardContent>
             </Card>
           ))}
@@ -300,7 +300,7 @@ function Active({
 
           <div className="grid gap-4 sm:grid-cols-[1fr_11rem]">
             <div className="space-y-1.5">
-              <label htmlFor="amount" className="text-[12.5px] text-muted-foreground">
+              <label htmlFor="amount" className="text-caption text-muted-foreground">
                 How much do you need?
               </label>
               <Input
@@ -308,11 +308,11 @@ function Active({
                 inputMode="decimal"
                 value={amountStr}
                 onChange={(e) => setAmount(e.target.value)}
-                className="tabular h-12 text-[22px] font-semibold tracking-tight md:text-[22px]"
+                className="tabular h-12 text-title font-semibold tracking-tight md:text-title"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[12.5px] text-muted-foreground">Repay in</label>
+              <label className="text-caption text-muted-foreground">Repay in</label>
               <Select value={String(term)} onValueChange={(v) => setTerm(Number(v))}>
                 <SelectTrigger className="h-12 w-full">
                   <SelectValue />
@@ -365,7 +365,7 @@ export function Note({
   children, icon: Icon = CircleAlert,
 }: { children: React.ReactNode; icon?: typeof CircleAlert }) {
   return (
-    <div className="flex gap-2 rounded-md border bg-muted/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
+    <div className="flex gap-2 rounded-md border bg-muted/40 px-3 py-2.5 text-meta leading-relaxed text-muted-foreground">
       <Icon className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
       <span>{children}</span>
     </div>

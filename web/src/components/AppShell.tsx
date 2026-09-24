@@ -37,7 +37,7 @@ export function AppShell({
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-16 items-center gap-2.5 border-b px-5">
           <img src="/float-favicon.svg" alt="" className="h-7 w-auto" />
-          <span className="text-[15px] font-semibold tracking-tight">Float</span>
+          <span className="text-body font-semibold tracking-tight">Float</span>
         </div>
 
         <nav className="flex-1 space-y-0.5 p-3">
@@ -47,7 +47,7 @@ export function AppShell({
               onClick={() => setTab(id)}
               aria-current={tab === id}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition-colors",
+                "flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-meta transition-colors",
                 tab === id
                   ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                   : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
@@ -60,7 +60,7 @@ export function AppShell({
         </nav>
 
         <div className="space-y-3 border-t p-4">
-          <div className="space-y-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          <div className="space-y-1.5 text-micro leading-relaxed text-muted-foreground">
             <p>
               <span className="font-medium text-foreground">Devnet.</span> No real money moves.
               USDC is a test mint Float controls and verification is done by Float's own key.
@@ -69,7 +69,7 @@ export function AppShell({
               href={explorer(config.programId)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 font-mono text-[11px] hover:text-foreground"
+              className="inline-flex items-center gap-1 font-mono text-micro hover:text-foreground"
             >
               {config.programId.slice(0, 4)}…{config.programId.slice(-4)}
               <ExternalLink className="size-3" strokeWidth={1.75} />
@@ -84,7 +84,7 @@ export function AppShell({
           <img src="/float-favicon.svg" alt="" className="h-6 w-auto" />
           <span className="text-sm font-semibold">Float</span>
         </div>
-        <h1 className="hidden text-[15px] font-medium tracking-tight lg:block">{title}</h1>
+        <h1 className="hidden text-body font-medium tracking-tight lg:block">{title}</h1>
         <div className="flex items-center gap-3">
           <WalletChip />
           <ConnectButton />
@@ -99,7 +99,7 @@ export function AppShell({
             onClick={() => setTab(id)}
             aria-current={tab === id}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+              "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-meta transition-colors",
               tab === id ? "bg-accent font-medium" : "text-muted-foreground",
             )}
           >
@@ -121,10 +121,10 @@ export function AppShell({
 export function SectionHeading({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
   return (
     <div className="mb-3 mt-10 flex items-baseline justify-between gap-4 first:mt-0">
-      <h2 className="text-[13px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+      <h2 className="text-meta font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {children}
       </h2>
-      {hint && <span className="text-[12px] text-muted-foreground">{hint}</span>}
+      {hint && <span className="text-caption text-muted-foreground">{hint}</span>}
     </div>
   );
 }

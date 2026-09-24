@@ -20,9 +20,9 @@ type Meta = { jurisdictions: string[]; companyTypes: string[] };
 
 const Field = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
   <div className="space-y-1.5">
-    <label className="text-[12.5px] text-muted-foreground">{label}</label>
+    <label className="text-caption text-muted-foreground">{label}</label>
     {children}
-    {hint && <p className="text-[11.5px] text-muted-foreground">{hint}</p>}
+    {hint && <p className="text-micro text-muted-foreground">{hint}</p>}
   </div>
 );
 
@@ -56,12 +56,12 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
     return (
       <Card className="shadow-none">
         <CardHeader>
-          <CardTitle className="text-[16px]">Verification is unavailable</CardTitle>
+          <CardTitle className="text-lead">Verification is unavailable</CardTitle>
         </CardHeader>
         <CardContent>
           <Note icon={CircleAlert}>
             Float's verifier is not reachable. Start it with{" "}
-            <code className="font-mono text-[12px]">npm run verifier</code> and reload.
+            <code className="font-mono text-caption">npm run verifier</code> and reload.
           </Note>
         </CardContent>
       </Card>
@@ -72,9 +72,9 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
       <CardHeader>
         <div className="flex items-center gap-2">
           <ShieldCheck className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-          <CardTitle className="text-[16px]">Verify your business</CardTitle>
+          <CardTitle className="text-lead">Verify your business</CardTitle>
         </div>
-        <CardDescription className="text-[13.5px]">
+        <CardDescription className="text-meta">
           Float lends to verified businesses. This takes a minute, and it is what sets your
           approved credit limit.
         </CardDescription>
@@ -110,7 +110,7 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
             label="Registration document"
             hint="Stays on your device. Only a hash of the application reaches the chain."
           >
-            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-[13px] text-muted-foreground transition-colors hover:bg-accent">
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-meta text-muted-foreground transition-colors hover:bg-accent">
               <Upload className="size-3.5 shrink-0" strokeWidth={1.75} />
               <span className="truncate">{form.documentName || "Choose a file"}</span>
               <input
@@ -128,7 +128,7 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" strokeWidth={1.75} />}
             Submit application
           </Button>
-          <span className="text-[12.5px] text-muted-foreground">Approval is immediate on devnet.</span>
+          <span className="text-caption text-muted-foreground">Approval is immediate on devnet.</span>
         </div>
 
         {errors.length > 0 && (
@@ -141,7 +141,7 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
           </Note>
         )}
 
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+        <p className="text-caption leading-relaxed text-muted-foreground">
           Float reviews the application and approves it on chain. In this demo the reviewer
           approves every well-formed application and grants everyone the same limit, so it is an
           authority check rather than a compliance system.
