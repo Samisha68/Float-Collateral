@@ -1,166 +1,290 @@
-/* Float design system.
+/* Float.
 
-   Authoritative source is DESIGN.md in the Float repository. Black and white
-   only, Poppins, tabular figures for money, and status carried in words rather
-   than colour. There are no green success or red danger states here, by rule:
-   a borrower reading "AT RISK" should not need to have seen the colour to know
-   it, and a screenshot in greyscale should lose nothing. */
+   Brand rules come from DESIGN.md and are not negotiable here: black and
+   white, Poppins, tabular figures for money, status carried in words rather
+   than colour.
 
-@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
+   Everything else is an attempt at restraint. The earlier version put every
+   group of numbers inside a bordered box, which made a credit account look
+   like a tax return. Structure now comes from whitespace and hairlines, type
+   is small and confident rather than large and loud, and prose is held to a
+   readable measure instead of stretching the full width of a monitor. */
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
 
 :root {
-  --black: #000000;
-  --white: #ffffff;
+  --ink: #000000;
+  --paper: #ffffff;
   --grey: #737373;
-  --grey-12: rgba(115, 115, 115, 0.12);
-  --grey-24: rgba(115, 115, 115, 0.24);
-  --grey-06: rgba(115, 115, 115, 0.06);
+  --grey-soft: rgba(115, 115, 115, 0.62);
+  --rule: rgba(0, 0, 0, 0.1);
+  --rule-soft: rgba(0, 0, 0, 0.055);
 
-  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
-  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --measure: 34rem;      /* prose, roughly 66 characters */
+  --measure-wide: 46rem; /* tables that need the room */
 
-  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
-
-  --ease: cubic-bezier(0.2, 0, 0.2, 1);
-  --fast: 150ms; --slow: 350ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --fast: 160ms;
 }
 
 * { box-sizing: border-box; }
-
-html, body, #root { height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background: var(--white);
-  color: var(--black);
+  background: var(--paper);
+  color: var(--ink);
   font-family: Poppins, system-ui, sans-serif;
-  font-weight: 400;
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.62;
+  font-weight: 400;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Money and dates line up in columns or they are not readable as figures. */
-.tabular, .money, td.num, .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.tabular, .num, td.num, th.num, .money {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
 
-h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
-h1 { font-size: 34px; }
-h2 { font-size: 22px; }
-h3 { font-size: 16px; font-weight: 600; }
-p { margin: 0; }
+/* ── Shell ─────────────────────────────────────────────────────────────── */
 
-/* Links are underlined text. Never pills: prominence comes from type, not
-   from a shape drawn around it. */
-a, .link {
-  color: var(--black);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-  cursor: pointer;
+.shell {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  gap: 4rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 3.5rem 2rem 8rem;
+  align-items: start;
+}
+
+/* The disclosure sits under the nav on a wide screen and after the content on
+   a narrow one, where putting it between the nav and the page would make the
+   reader step over it to reach anything. */
+.rail { grid-column: 1; grid-row: 1; }
+main { grid-column: 2; grid-row: 1 / span 2; }
+.colophon {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--grey-soft);
+  max-width: 11rem;
+}
+.colophon strong { color: var(--grey); font-weight: 500; }
+
+.rail { position: sticky; top: 3.5rem; }
+.rail .mark { height: 26px; width: auto; display: block; margin-bottom: 2.75rem; }
+
+.rail nav { display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+.rail nav button {
+  font: inherit;
+  font-size: 14px;
   background: none;
   border: 0;
   padding: 0;
-  font: inherit;
-  transition: opacity var(--fast) var(--ease);
-}
-a:hover, .link:hover { opacity: 0.6; }
-
-.layout { max-width: 940px; margin: 0 auto; padding: var(--s5) var(--s4) var(--s8); }
-
-header.masthead {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: var(--s4); flex-wrap: wrap;
-  padding-bottom: var(--s4); border-bottom: 1px solid var(--black);
-}
-/* The supplied mark, never the word set in type. DESIGN.md is explicit. */
-.wordmark { height: 30px; width: auto; display: block; }
-nav.tabs { display: flex; gap: var(--s4); flex-wrap: wrap; }
-nav.tabs button {
-  background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+  text-align: left;
   color: var(--grey);
-  text-decoration: underline; text-underline-offset: 3px;
-  text-decoration-color: transparent;
-  transition: color var(--fast) var(--ease), text-decoration-color var(--fast) var(--ease);
+  cursor: pointer;
+  transition: color var(--fast) var(--ease);
 }
-nav.tabs button:hover { color: var(--black); }
-nav.tabs button[aria-current="true"] { color: var(--black); font-weight: 600; text-decoration-color: var(--black); }
+.rail nav button:hover { color: var(--ink); }
+.rail nav button[aria-current="true"] { color: var(--ink); font-weight: 500; }
 
-section { margin-top: var(--s7); }
-.section-title { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); margin-bottom: var(--s3); }
-
-/* A figure: a large number with its label underneath. The hierarchy is the
-   point, so the label never competes with the value. */
-.figure .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
-.figure .label { font-size: 13px; color: var(--grey); }
-.figure.lead .value { font-size: 44px; }
-
-.grid { display: grid; gap: var(--s5); }
-.grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-dl.rows { margin: 0; display: grid; gap: 0; }
-dl.rows > div {
-  display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4);
-  padding: var(--s3) 0; border-bottom: 1px solid var(--grey-12);
+.rail .rail-group { margin-top: 2.75rem; }
+.rail .rail-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey-soft);
+  margin-bottom: 0.7rem;
 }
-dl.rows > div:last-child { border-bottom: 0; }
-dl.rows dt { color: var(--grey); font-size: 14px; }
-dl.rows dd { margin: 0; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
 
-.panel { border: 1px solid var(--black); border-radius: var(--r-lg); padding: var(--s5); }
-.panel.quiet { border-color: var(--grey-24); }
+/* ── Flow ──────────────────────────────────────────────────────────────── */
 
-/* Status is a word. The only variation is weight and a rule underneath it. */
-.status { display: inline-block; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; }
-.status.strong { border-bottom: 2px solid var(--black); padding-bottom: 2px; }
+main { max-width: var(--measure-wide); }
+main > * + * { margin-top: 1.15rem; }
 
-button.action {
-  font: inherit; font-weight: 600; cursor: pointer;
-  background: var(--black); color: var(--white);
-  border: 1px solid var(--black); border-radius: var(--r-sm);
-  padding: var(--s3) var(--s5);
-  transition: opacity var(--fast) var(--ease);
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--grey-soft);
 }
-button.action:hover:not(:disabled) { opacity: 0.8; }
-button.action:disabled { background: var(--white); color: var(--grey); border-color: var(--grey-24); cursor: not-allowed; }
-button.action.secondary { background: var(--white); color: var(--black); }
 
-input[type="text"], input[type="number"], select {
-  font: inherit; font-variant-numeric: tabular-nums;
-  padding: var(--s3); width: 100%;
-  border: 1px solid var(--grey-24); border-radius: var(--r-sm);
-  background: var(--white); color: var(--black);
-  accent-color: var(--black);
+h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.22;
+  letter-spacing: -0.028em;
+  max-width: 22ch;
 }
-input:focus, select:focus { outline: 2px solid var(--black); outline-offset: 1px; border-color: var(--black); }
+h1.tall { font-size: 38px; max-width: 16ch; }
+/* A headline needs room to land before the sentence under it starts. */
+h1 + p, h1 + .note { margin-top: 1.6rem; }
+h1.tall + p { margin-top: 1.9rem; }
 
-label.field { display: block; }
-label.field .label { display: block; font-size: 13px; color: var(--grey); margin-bottom: var(--s2); }
+h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
 
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: var(--s3) 0; border-bottom: 1px solid var(--grey-12); }
-th { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--grey); font-weight: 500; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+p { margin: 0; max-width: var(--measure); }
+p.lede { font-size: 17px; line-height: 1.55; color: var(--ink); }
+p.note { font-size: 13.5px; color: var(--grey); line-height: 1.6; }
 
-.note { color: var(--grey); font-size: 13px; }
+/* A section opens with a small heading and a hairline that runs to the edge,
+   which is all the separation a section needs. */
+.block { margin-top: 5.25rem; }
+.block > h2 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.6rem;
+  white-space: nowrap;
+}
+.block > h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+.block > * + * { margin-top: 1.3rem; }
+
+a, .link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--rule);
+  transition: text-decoration-color var(--fast) var(--ease);
+}
+a:hover, .link:hover { text-decoration-color: currentColor; }
+
+/* ── Data ──────────────────────────────────────────────────────────────── */
+
+/* Rows of figures, separated by air and one hairline. No enclosing box. */
+/* Held to a width where the label and its figure still read as a pair.
+   Across a full monitor they drift apart and stop being a row. */
+.ledger { width: 100%; max-width: 30rem; border-collapse: collapse; }
+.ledger.wide { max-width: 40rem; }
+.ledger th, .ledger td {
+  padding: 0.62rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: baseline;
+}
+.ledger tr:last-child th, .ledger tr:last-child td { border-bottom: 0; }
+.ledger th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--grey);
+  white-space: nowrap;
+}
+.ledger td { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+.ledger td.lead { font-weight: 500; }
+.ledger thead th {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--grey-soft);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.7rem;
+}
+.ledger thead th.num { text-align: right; }
+
+/* The one place a number is allowed to be large. */
+.headline-figure {
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.headline-figure + .label { font-size: 13px; color: var(--grey); margin-top: 0.35rem; }
+
+.spread { display: flex; gap: 3.5rem; flex-wrap: wrap; }
+.spread > div { min-width: 7rem; }
+.spread .v { font-size: 23px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.spread .k { font-size: 12.5px; color: var(--grey); margin-top: 0.15rem; }
+
+/* Status is a word, and the only emphasis it gets is weight. */
+.status {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.status.quiet { color: var(--grey); }
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+
+.ask { display: flex; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; }
+.ask .field { display: flex; flex-direction: column; gap: 0.45rem; }
+.ask .field > span { font-size: 12.5px; color: var(--grey); }
+
+input[type="text"], select {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 0.3rem 0;
+  transition: border-color var(--fast) var(--ease);
+}
+input[type="text"] { font-size: 27px; font-weight: 500; letter-spacing: -0.02em; width: 7.5ch; }
+select { font-size: 15px; padding-right: 1.2rem; }
+input:focus, select:focus { outline: none; border-bottom-width: 2px; margin-bottom: -1px; }
+
+/* The answer to the question the page asked. It is a sentence, not a chip:
+   status is carried in words here, and a word set in 11px is not carrying it. */
+.verdict { margin-top: 0.4rem; }
+.verdict .word {
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.022em;
+  line-height: 1.3;
+  max-width: 20ch;
+}
+.verdict ul { margin: 0.75rem 0 0; padding-left: 1.05rem; max-width: var(--measure); }
+.verdict li { font-size: 13.5px; color: var(--grey); line-height: 1.6; margin-bottom: 0.3rem; }
+
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.spinner { color: var(--grey-soft); font-size: 14px; }
 
-.disclosure {
-  margin-top: var(--s7); padding: var(--s4);
-  border: 1px solid var(--grey-24); border-radius: var(--r-md);
-  background: var(--grey-06); color: var(--grey); font-size: 13px;
-}
-.disclosure strong { color: var(--black); }
+/* ── Small screens ─────────────────────────────────────────────────────── */
 
-.spinner { color: var(--grey); font-size: 14px; }
-
-@media (max-width: 720px) {
-  .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
-  h1 { font-size: 26px; }
-  .figure.lead .value { font-size: 34px; }
-  .figure .value { font-size: 24px; }
-  .layout { padding: var(--s4) var(--s4) var(--s7); }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: none; gap: 2.5rem; padding: 2rem 1.25rem 5rem; }
+  .rail { position: static; }
+  .rail .mark { margin-bottom: 1.5rem; }
+  .rail nav { flex-direction: row; flex-wrap: wrap; gap: 1.1rem; }
+  .rail .rail-group { margin-top: 1.5rem; }
+  .rail { grid-column: 1; grid-row: auto; }
+  main { grid-column: 1; grid-row: auto; }
+  .colophon {
+    grid-column: 1;
+    grid-row: auto;
+    max-width: none;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule-soft);
+  }
+  h1 { font-size: 25px; }
+  h1.tall { font-size: 29px; }
+  .headline-figure { font-size: 32px; }
+  .block { margin-top: 3rem; }
+  .spread { gap: 2rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

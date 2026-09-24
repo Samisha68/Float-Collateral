@@ -1,51 +1,66 @@
-/* The small pieces every screen is built from.
-
-   Deliberately few. DESIGN.md asks for strong typography, strong spacing and
-   few actions, which is easier to hold to when there are only six things to
-   reach for. */
+/* Four pieces. The earlier set had a Panel that everything ended up inside,
+   which is how the interface turned into a stack of boxes. There is no box
+   here on purpose: a section is a heading, a hairline, and some air. */
 
 import type { ReactNode } from "react";
 import { explorer, shortKey } from "../lib/format";
 
-export function SectionTitle({ children }: { children: ReactNode }) {
-  return <div className="section-title">{children}</div>;
+export function Block({ title, children }: { title: ReactNode; children: ReactNode }) {
+  return (
+    <section className="block">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
 }
 
-export function Figure({
-  value, label, lead = false,
-}: { value: ReactNode; label: ReactNode; lead?: boolean }) {
+/** A column of figures against their labels. Hairlines, no border. */
+export function Ledger({
+  rows, head,
+}: {
+  rows: [ReactNode, ReactNode][];
+  head?: [ReactNode, ...ReactNode[]];
+}) {
   return (
-    <div className={lead ? "figure lead" : "figure"}>
-      <div className="value tabular">{value}</div>
-      <div className="label">{label}</div>
+    <table className="ledger">
+      {head && (
+        <thead>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i} className={i === 0 ? undefined : "num"}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+      )}
+      <tbody>
+        {rows.map(([k, v], i) => (
+          <tr key={i}>
+            <th scope="row">{k}</th>
+            <td>{v}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** A few figures side by side, for the numbers that carry a screen. */
+export function Spread({ items }: { items: [ReactNode, ReactNode][] }) {
+  return (
+    <div className="spread">
+      {items.map(([value, label], i) => (
+        <div key={i}>
+          <div className="v">{value}</div>
+          <div className="k">{label}</div>
+        </div>
+      ))}
     </div>
   );
 }
 
-export function Rows({ items }: { items: [ReactNode, ReactNode][] }) {
-  return (
-    <dl className="rows">
-      {items.map(([term, value], i) => (
-        <div key={i}>
-          <dt>{term}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function Panel({
-  children, quiet = false,
-}: { children: ReactNode; quiet?: boolean }) {
-  return <div className={quiet ? "panel quiet" : "panel"}>{children}</div>;
-}
-
-/* Status is a word. No colour carries meaning anywhere in this interface, so
-   this renders the same in greyscale as in full colour, and to a screen
-   reader as to an eye. */
-export function Status({ children, strong = false }: { children: ReactNode; strong?: boolean }) {
-  return <span className={strong ? "status strong" : "status"}>{children}</span>;
+/** Status is a word. No colour carries meaning anywhere in this interface. */
+export function Status({ children, quiet = false }: { children: ReactNode; quiet?: boolean }) {
+  return <span className={quiet ? "status quiet" : "status"}>{children}</span>;
 }
 
 export function Key({ value, kind = "address" }: { value: string; kind?: "address" | "tx" }) {
@@ -54,8 +69,4 @@ export function Key({ value, kind = "address" }: { value: string; kind?: "addres
       {shortKey(value)}
     </a>
   );
-}
-
-export function Disclosure({ children }: { children: ReactNode }) {
-  return <div className="disclosure">{children}</div>;
 }

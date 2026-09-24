@@ -1,20 +1,19 @@
 /* The screen that carries the argument.
 
-   Two verified businesses, the same approved credit, different histories,
-   different terms. Nothing here is a constant: both columns are read from
-   BusinessVerification and BusinessRecord accounts on devnet, and borrower B's
-   six repayments are six real transactions. If they were hardcoded the claim
-   would be a mockup, and a mockup is exactly what this screen exists to not be. */
+   One claim, stated once, then the evidence for it. Both columns are read
+   from BusinessVerification and BusinessRecord accounts on devnet, and the
+   six repayments on the right are six real transactions. If they were
+   hardcoded this would be a mockup, which is the one thing it must not be. */
 
 import { useEffect, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { Panel, SectionTitle, Status, Key } from "../components/ui";
+import { Block, Ledger, Status, Key } from "../components/ui";
 import { usd, pct, annualised } from "../lib/format";
 import { marginBps, rateBps, coverageRequired, tierName } from "../lib/pricing";
 import { getRecordsFor } from "../lib/chain";
 import { BORROWERS } from "../lib/useBorrower";
 
-const DRAW = 5_000_000_000n; // the same $5,000 ask
+const DRAW = 5_000_000_000n;
 const TERM = 30;
 
 type Col = {
@@ -31,15 +30,15 @@ export default function Compare() {
     (async () => {
       try {
         const rows = await getRecordsFor(BORROWERS.map((b) => new PublicKey(b.wallet)));
-        const out = BORROWERS.map((b, i) => {
+        if (!live) return;
+        setCols(BORROWERS.map((b, i) => {
           const { verification: v, record: r } = rows[i];
           return {
             label: b.label, wallet: b.wallet,
             verified: !!v?.verified, limit: v?.creditLimit ?? 0n,
             repaid: r.advancesRepaid, overdue: r.advancesOverdue, volume: r.totalVolumeRepaid,
           };
-        });
-        if (live) setCols(out);
+        }));
       } catch (e: any) {
         if (live) setError(e?.message ?? String(e));
       }
@@ -47,95 +46,88 @@ export default function Compare() {
     return () => { live = false; };
   }, []);
 
-  if (error) return <section><p className="note">Could not read devnet: {error}</p></section>;
-  if (!cols) return <section><p className="spinner">Reading both records from devnet…</p></section>;
+  if (error) return <p className="note">Could not read devnet. {error}</p>;
+  if (!cols) return <p className="spinner">Reading both records from devnet…</p>;
 
   const [a, b] = cols;
   const cov = (c: Col) => coverageRequired(DRAW, c.repaid);
   const diff = cov(a) > cov(b) ? cov(a) - cov(b) : cov(b) - cov(a);
 
-  const row = (label: string, left: React.ReactNode, right: React.ReactNode, strong = false) => (
+  const pair = (label: string, l: React.ReactNode, r: React.ReactNode, lead = false) => (
     <tr>
-      <th scope="row" style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, fontSize: 14 }}>
-        {label}
-      </th>
-      <td className="num" style={strong ? { fontWeight: 600 } : undefined}>{left}</td>
-      <td className="num" style={strong ? { fontWeight: 600 } : undefined}>{right}</td>
+      <th scope="row">{label}</th>
+      <td className={lead ? "lead" : undefined}>{l}</td>
+      <td className={lead ? "lead" : undefined}>{r}</td>
     </tr>
   );
 
   return (
     <>
-      <section>
-        <h1>Same credit limit.<br />Different history.<br />Different terms.</h1>
-      </section>
+      <div className="eyebrow">The argument</div>
+      <h1 className="tall">Same credit limit. Different history. Different terms.</h1>
+      <p className="lede">
+        Two verified businesses, each approved for {usd(a.limit, { cents: false })}. One has
+        never borrowed. The other has repaid six times. Float will not lend the second one a
+        penny more, and it will charge it considerably less.
+      </p>
 
-      <section>
-        <Panel>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: "40%" }} />
-                <th className="num">{a.label}</th>
-                <th className="num">{b.label}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {row("Status", <Status>{a.verified ? "VERIFIED" : "UNVERIFIED"}</Status>, <Status>{b.verified ? "VERIFIED" : "UNVERIFIED"}</Status>)}
-              {row("Tier", <Status>{tierName(a.repaid)}</Status>, <Status>{tierName(b.repaid)}</Status>)}
-              {row("Approved credit", usd(a.limit), usd(b.limit), true)}
-              {row("Successful repayments", a.repaid, b.repaid)}
-              {row("Overdue", a.overdue, b.overdue)}
-              {row("Total repaid", usd(a.volume), usd(b.volume))}
-              {row("Collateral requirement", pct(marginBps(a.repaid), 0), pct(marginBps(b.repaid), 0), true)}
-              {row(
-                `Fee (${TERM} days)`,
-                `${pct(rateBps(TERM, a.repaid))}`,
-                `${pct(rateBps(TERM, b.repaid))}`,
-              )}
-              {row(
-                "Annualised",
-                annualised(rateBps(TERM, a.repaid), TERM),
-                annualised(rateBps(TERM, b.repaid), TERM),
-              )}
-            </tbody>
-          </table>
-        </Panel>
-      </section>
+      <Block title="Both businesses">
+        <table className="ledger wide">
+          <thead>
+            <tr>
+              <th />
+              <th className="num">{a.label}</th>
+              <th className="num">{b.label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pair("Status", <Status quiet>{a.verified ? "Verified" : "Unverified"}</Status>,
+                            <Status quiet>{b.verified ? "Verified" : "Unverified"}</Status>)}
+            {pair("Tier", <Status quiet>{tierName(a.repaid)}</Status>,
+                          <Status quiet>{tierName(b.repaid)}</Status>)}
+            {pair("Approved credit", usd(a.limit), usd(b.limit), true)}
+            {pair("Successful repayments", a.repaid, b.repaid)}
+            {pair("Overdue", a.overdue, b.overdue)}
+            {pair("Total repaid", usd(a.volume), usd(b.volume))}
+          </tbody>
+        </table>
+      </Block>
 
-      <section>
-        <SectionTitle>For the same {usd(DRAW, { cents: false })} draw</SectionTitle>
-        <Panel>
-          <table>
-            <tbody>
-              {row("Coverage needed", usd(cov(a)), usd(cov(b)), true)}
-            </tbody>
-          </table>
-          <p style={{ marginTop: 24, fontSize: 17 }}>
-            The approved limit is identical. The repayment record is what moved the terms,
-            and it moved them by <strong>{usd(diff)}</strong> of coverage.
-          </p>
-          <p className="note" style={{ marginTop: 8 }}>
-            A record improves the price of credit. It never increases how much a business may
-            borrow, because the limit lives on an account no credit instruction can write.
-          </p>
-        </Panel>
-      </section>
+      <Block title={`To draw ${usd(DRAW, { cents: false })} for ${TERM} days`}>
+        <table className="ledger wide">
+          <tbody>
+            {pair("Collateral requirement", pct(marginBps(a.repaid), 0), pct(marginBps(b.repaid), 0), true)}
+            {pair("Coverage needed", usd(cov(a)), usd(cov(b)), true)}
+            {pair("Fee", usd((DRAW * BigInt(rateBps(TERM, a.repaid))) / 10_000n),
+                         usd((DRAW * BigInt(rateBps(TERM, b.repaid))) / 10_000n))}
+            {pair("Rate", pct(rateBps(TERM, a.repaid)), pct(rateBps(TERM, b.repaid)))}
+            {pair("Annualised", annualised(rateBps(TERM, a.repaid), TERM),
+                                annualised(rateBps(TERM, b.repaid), TERM))}
+          </tbody>
+        </table>
 
-      <section>
-        <SectionTitle>Read it yourself</SectionTitle>
-        <Panel quiet>
-          <table>
-            <tbody>
-              {row("Wallet", <Key value={a.wallet} />, <Key value={b.wallet} />)}
-            </tbody>
-          </table>
-          <p className="note" style={{ marginTop: 16 }}>
-            Both columns are read live from devnet. The {b.repaid} repayments on the right are{" "}
-            {b.repaid} separate borrow and repay transactions against this program.
-          </p>
-        </Panel>
-      </section>
+        <p className="lede" style={{ marginTop: "2rem" }}>
+          The record moved the terms by {usd(diff)} of coverage. It moved the limit by nothing.
+        </p>
+        <p className="note">
+          That is not a convention the code politely observes. The approved limit lives on an
+          account only the verifier may write, and the record lives on an account only the credit
+          instructions may write. No credit instruction can reach the limit.
+        </p>
+      </Block>
+
+      <Block title="Read it yourself">
+        <Ledger
+          rows={[
+            [a.label, <Key value={a.wallet} />],
+            [b.label, <Key value={b.wallet} />],
+          ]}
+        />
+        <p className="note">
+          Both columns are read live from devnet. The {b.repaid} repayments on the right are{" "}
+          {b.repaid} separate borrow and repay transactions against this program.
+        </p>
+      </Block>
     </>
   );
 }
