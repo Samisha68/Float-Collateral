@@ -124,14 +124,21 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "cv11";
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.006em;
-  }
-  /* Money and dates line up in columns or they stop reading as figures. */
-  .tabular {
+    /* DESIGN.md asks for tabular figures on money and dates. This product is
+       almost nothing but money and dates, and the opt-in class kept missing
+       amounts written inside sentences, so it is the default here. */
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
+  }
+  /* Links are the only controls without their own ring, so they were falling
+     back to the browser's accent colour. DESIGN.md forbids a coloured focus
+     state, and Safari's blue is exactly that. */
+  a:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 }
 
@@ -266,5 +273,11 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  /* One exception. The spinner is the only indication that a signature or a
+     transaction is pending, and freezing it tells a waiting user nothing is
+     happening. Slowed rather than stopped. */
+  .animate-spin {
+    animation-duration: 1.2s !important;
   }
 }

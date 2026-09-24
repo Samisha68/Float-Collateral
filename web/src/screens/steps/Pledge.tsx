@@ -63,9 +63,12 @@ export default function Pledge({
         </Note>
 
         <div className="space-y-1.5">
-          <label className="text-caption text-muted-foreground">Your pool address on devnet</label>
+          <label htmlFor="pool-address" className="text-caption text-muted-foreground">
+            Your pool address on devnet
+          </label>
           <div className="flex gap-2">
             <Input
+              id="pool-address"
               value={address}
               onChange={(e) => { setAddress(e.target.value); setCheck(null); }}
               placeholder="3svMNFGD4XC11Lf6K1Mq4aEGS5LjfbU1AYa9BagXAXX4"

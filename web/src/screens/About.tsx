@@ -40,7 +40,7 @@ export default function About() {
         <div className="grid gap-3 sm:grid-cols-2">
           {LOOP.map(({ icon: Icon, t, d }) => (
             <Card key={t} className="shadow-none">
-              <CardContent className="flex gap-3 pt-6">
+              <CardContent className="flex gap-3">
                 <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                 <div>
                   <div className="text-body font-medium">{t}</div>
@@ -87,7 +87,7 @@ export default function About() {
       <div>
         <SectionHeading>What is real, and what stands in</SectionHeading>
         <Card className="shadow-none">
-          <CardContent className="pt-6">
+          <CardContent>
             <Rows
               items={[
                 ["The program", <>Deployed on devnet <KeyLink value={config.programId} /></>],
@@ -105,7 +105,7 @@ export default function About() {
       <div>
         <SectionHeading>Known limits</SectionHeading>
         <Card className="shadow-none">
-          <CardContent className="pt-6">
+          <CardContent>
             <Rows
               items={[
                 ["Pools must be quoted in USDC", "A SOL-quoted pool would need a price feed"],

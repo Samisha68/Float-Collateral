@@ -79,7 +79,7 @@ export default function Compare() {
       </div>
 
       <Card className="shadow-none">
-        <CardContent className="pt-6">
+        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -103,7 +103,7 @@ export default function Compare() {
       <div>
         <SectionHeading>To draw {usd(DRAW, { cents: false })} for {TERM} days</SectionHeading>
         <Card className="shadow-none">
-          <CardContent className="space-y-5 pt-6">
+          <CardContent className="space-y-5">
             <Table>
               <TableBody>
                 {row("Collateral requirement", pct(marginBps(a.repaid), 0), pct(marginBps(b.repaid), 0), true)}
@@ -129,7 +129,7 @@ export default function Compare() {
       <div>
         <SectionHeading>Read it yourself</SectionHeading>
         <Card className="shadow-none">
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <div className="flex items-center justify-between gap-4 text-meta">
               <span className="text-muted-foreground">{a.label}</span>
               <KeyLink value={a.wallet} />

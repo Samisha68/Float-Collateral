@@ -40,12 +40,12 @@ export function AppShell({
           <span className="text-body font-semibold tracking-tight">Float</span>
         </div>
 
-        <nav className="flex-1 space-y-0.5 p-3">
+        <nav aria-label="Sections" className="flex-1 space-y-0.5 p-3">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              aria-current={tab === id}
+              aria-current={tab === id ? "page" : undefined}
               className={cn(
                 "flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-meta transition-colors",
                 tab === id
@@ -84,7 +84,7 @@ export function AppShell({
           <img src="/float-favicon.svg" alt="" className="h-6 w-auto" />
           <span className="text-sm font-semibold">Float</span>
         </div>
-        <h1 className="hidden text-body font-medium tracking-tight lg:block">{title}</h1>
+        <h1 className="text-body font-medium tracking-tight max-lg:sr-only">{title}</h1>
         <div className="flex items-center gap-3">
           <WalletChip />
           <ConnectButton />
@@ -92,12 +92,12 @@ export function AppShell({
       </header>
 
       {/* Mobile nav */}
-      <nav className="fixed inset-x-0 top-16 z-20 flex gap-1 overflow-x-auto border-b bg-background px-4 py-2 lg:hidden">
+      <nav aria-label="Sections" className="fixed inset-x-0 top-16 z-20 flex gap-1 overflow-x-auto border-b bg-background px-4 py-2 lg:hidden">
         {NAV.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            aria-current={tab === id}
+            aria-current={tab === id ? "page" : undefined}
             className={cn(
               "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-meta transition-colors",
               tab === id ? "bg-accent font-medium" : "text-muted-foreground",

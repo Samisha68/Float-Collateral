@@ -6,7 +6,7 @@
    approval can be tied back to the evidence it was granted against without
    publishing any of it. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
 import { ShieldCheck, Loader2, CircleAlert, Upload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,13 +18,27 @@ import { API } from "@/lib/api";
 
 type Meta = { jurisdictions: string[]; companyTypes: string[] };
 
-const Field = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-  <div className="space-y-1.5">
-    <label className="text-caption text-muted-foreground">{label}</label>
-    {children}
-    {hint && <p className="text-micro text-muted-foreground">{hint}</p>}
-  </div>
-);
+/* A label with no htmlFor is not a label. Radix's SelectTrigger cannot be
+   targeted by htmlFor, so it gets aria-labelledby from the same id instead. */
+const Field = ({
+  label, hint, children,
+}: {
+  label: string;
+  hint?: string;
+  children: (ids: { id: string; labelId: string }) => React.ReactNode;
+}) => {
+  const id = useId();
+  const labelId = `${id}-label`;
+  return (
+    <div className="space-y-1.5">
+      <label id={labelId} htmlFor={id} className="text-caption text-muted-foreground">
+        {label}
+      </label>
+      {children({ id, labelId })}
+      {hint && <p className="text-micro text-muted-foreground">{hint}</p>}
+    </div>
+  );
+};
 
 export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: () => void }) {
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -82,44 +96,64 @@ export default function Apply({ wallet, onDone }: { wallet: PublicKey; onDone: (
       <CardContent className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Legal business name">
-            <Input value={form.legalName} onChange={(e) => set("legalName")(e.target.value)} placeholder="Kettle & Co Ltd" />
+            {({ id }) => (
+              <Input id={id} value={form.legalName} onChange={(e) => set("legalName")(e.target.value)} placeholder="Kettle & Co Ltd" />
+            )}
           </Field>
           <Field label="Registration number">
-            <Input value={form.registrationNumber} onChange={(e) => set("registrationNumber")(e.target.value)} placeholder="09876543" />
+            {({ id }) => (
+              <Input id={id} value={form.registrationNumber} onChange={(e) => set("registrationNumber")(e.target.value)} placeholder="09876543" />
+            )}
           </Field>
           <Field label="Jurisdiction">
-            <Select value={form.jurisdiction} onValueChange={set("jurisdiction")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select…" /></SelectTrigger>
-              <SelectContent>
-                {meta?.jurisdictions.map((j) => <SelectItem key={j} value={j}>{j}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {({ id, labelId }) => (
+              <Select value={form.jurisdiction} onValueChange={set("jurisdiction")}>
+                <SelectTrigger id={id} aria-labelledby={labelId} className="w-full">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {meta?.jurisdictions.map((j) => <SelectItem key={j} value={j}>{j}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </Field>
           <Field label="Company type">
-            <Select value={form.companyType} onValueChange={set("companyType")}>
-              <SelectTrigger className="w-full"><SelectValue placeholder="Select…" /></SelectTrigger>
-              <SelectContent>
-                {meta?.companyTypes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {({ id, labelId }) => (
+              <Select value={form.companyType} onValueChange={set("companyType")}>
+                <SelectTrigger id={id} aria-labelledby={labelId} className="w-full">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {meta?.companyTypes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </Field>
           <Field label="Authorised representative">
-            <Input value={form.representative} onChange={(e) => set("representative")(e.target.value)} placeholder="A. Director" />
+            {({ id }) => (
+              <Input id={id} value={form.representative} onChange={(e) => set("representative")(e.target.value)} placeholder="A. Director" />
+            )}
           </Field>
           <Field
             label="Registration document"
             hint="Stays on your device. Only a hash of the application reaches the chain."
           >
-            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-meta text-muted-foreground transition-colors hover:bg-accent">
-              <Upload className="size-3.5 shrink-0" strokeWidth={1.75} />
-              <span className="truncate">{form.documentName || "Choose a file"}</span>
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                className="sr-only"
-                onChange={(e) => set("documentName")(e.target.files?.[0]?.name ?? "")}
-              />
-            </label>
+            {({ id }) => (
+              <label
+                htmlFor={id}
+                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-meta text-muted-foreground transition-colors hover:bg-accent focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
+              >
+                <Upload className="size-3.5 shrink-0" strokeWidth={1.75} />
+                <span className="truncate">{form.documentName || "Choose a file"}</span>
+                <input
+                  id={id}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  className="sr-only"
+                  onChange={(e) => set("documentName")(e.target.files?.[0]?.name ?? "")}
+                />
+              </label>
+            )}
           </Field>
         </div>
 

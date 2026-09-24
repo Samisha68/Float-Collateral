@@ -108,7 +108,7 @@ export default function Journey({
             { icon: ArrowDownToLine, t: "Draw and repay", d: "Fees pay the loan down. Every repayment improves your terms." },
           ].map(({ icon: Icon, t, d }) => (
             <Card key={t} className="shadow-none">
-              <CardContent className="space-y-2 pt-6">
+              <CardContent className="space-y-2">
                 <Icon className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
                 <div className="text-body font-medium">{t}</div>
                 <p className="text-meta leading-relaxed text-muted-foreground">{d}</p>
@@ -177,7 +177,7 @@ function Active({
     <>
       <SectionHeading hint={<StatusWord>{tierName(n)}</StatusWord>}>Your standing</SectionHeading>
       <Card className="shadow-none">
-        <CardContent className="pt-6">
+        <CardContent>
           <Rows
             items={[
               ["Successful repayments", n],
@@ -197,7 +197,7 @@ function Active({
 
       <SectionHeading>What secures this</SectionHeading>
       <Card className="shadow-none">
-        <CardContent className="pt-6">
+        <CardContent>
           <Rows
             items={[
               ["Pledged pool", position.poolAddress ? <KeyLink value={position.poolAddress} /> : "—"],
@@ -219,7 +219,7 @@ function Active({
     return (
       <div>
         <Card className="shadow-none">
-          <CardContent className="space-y-6 pt-6">
+          <CardContent className="space-y-6">
             <Headline
               value={usd(outstanding)}
               label={`left to repay, after ${usd(loan.collected)} collected from your pool`}
@@ -291,7 +291,7 @@ function Active({
   return (
     <div>
       <Card className="shadow-none">
-        <CardContent className="space-y-6 pt-6">
+        <CardContent className="space-y-6">
           <Headline
             value={usd(limit)}
             label="approved credit"
@@ -308,7 +308,7 @@ function Active({
                 inputMode="decimal"
                 value={amountStr}
                 onChange={(e) => setAmount(e.target.value)}
-                className="tabular h-12 text-title font-semibold tracking-tight md:text-title"
+                className="h-12 text-title font-semibold tracking-tight"
               />
             </div>
             <div className="space-y-1.5">
