@@ -44,6 +44,10 @@ export const verificationPda = (w: PublicKey) => pda(enc.encode("verification"),
 export const recordPda = (w: PublicKey) => pda(enc.encode("record"), w.toBuffer());
 export const pledgePda = (pool: PublicKey) => pda(enc.encode("pledge"), pool.toBuffer());
 export const loanPda = (w: PublicKey) => pda(enc.encode("loan"), LOAN_VERSION, w.toBuffer());
+/* The loan address before LOAN_VERSION existed. Nothing writes here any more,
+   but the advances taken before the token rail landed are recorded against it
+   and a borrower's history has to include them. */
+export const legacyLoanPda = (w: PublicKey) => pda(enc.encode("loan"), w.toBuffer());
 export const priceFeedPda = (mint: PublicKey) => pda(enc.encode("price"), mint.toBuffer());
 export const tokenVaultPda = (mint: PublicKey) => pda(enc.encode("token_vault"), mint.toBuffer());
 export const tokenCollateralPda = (w: PublicKey, mint: PublicKey) =>

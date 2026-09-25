@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  Building2, Copy, Check, FileLock2, Wallet as WalletIcon,
+  Building2, Copy, Check, FileLock2, Wallet as WalletIcon, Loader2, History as HistoryIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,7 @@ import { API } from "@/lib/api";
 import { config } from "@/lib/chain";
 import type { Position } from "@/lib/useConnected";
 import * as act from "@/lib/actions";
+import { getHistory, type History } from "@/lib/history";
 
 type Business =
   | { applied: false }
@@ -51,6 +52,8 @@ export default function Profile({
   const { publicKey, wallet } = useWallet();
   const [business, setBusiness] = useState<Business | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
+  const [history, setHistory] = useState<History | null>(null);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const address = publicKey?.toBase58() ?? "";
   const { copy, state: copied } = useCopy(address);
 
@@ -63,6 +66,10 @@ export default function Profile({
     act.usdcBalance(publicKey)
       .then((b) => { if (live) setBalance(b); })
       .catch(() => { if (live) setBalance(null); });
+    setHistory(null); setHistoryFailed(false);
+    getHistory(publicKey)
+      .then((h) => { if (live) setHistory(h); })
+      .catch(() => { if (live) { setHistory({ advances: [], truncated: true }); setHistoryFailed(true); } });
     return () => { live = false; };
   }, [publicKey?.toBase58()]);
 
@@ -255,6 +262,87 @@ export default function Profile({
           </Card>
         </div>
       )}
+
+      {/* Every advance, not just a count of them */}
+      <div>
+        <SectionHeading
+          hint={history && history.advances.length > 0 ? `${history.advances.length} on record` : undefined}
+        >
+          Your advances
+        </SectionHeading>
+        <Card className="shadow-none">
+          <CardContent>
+            {history === null ? (
+              <div className="flex items-center gap-2 text-meta text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+                Reading your history off the chain…
+              </div>
+            ) : historyFailed ? (
+              <p className="text-meta leading-relaxed text-muted-foreground">
+                Could not read your history just now — devnet rate-limits this lookup harder than
+                most. Your record above is unaffected; it is read from an account, not from
+                transaction logs.
+              </p>
+            ) : history.advances.length === 0 ? (
+              <p className="text-meta leading-relaxed text-muted-foreground">
+                No advances yet. Your first one prices at{" "}
+                {pct(marginBpsFor(rail ?? "feeStream", 0), 0)} collateral; the sixth repayment
+                takes that down by 30 points.
+              </p>
+            ) : (
+              <>
+                <div className="-mx-1 overflow-x-auto">
+                  <table className="w-full min-w-[34rem] border-collapse text-meta">
+                    <thead>
+                      <tr className="border-b text-micro uppercase tracking-[0.08em] text-muted-foreground">
+                        <th className="px-1 pb-2 text-left font-medium">#</th>
+                        <th className="px-1 pb-2 text-left font-medium">Drawn</th>
+                        <th className="px-1 pb-2 text-right font-medium">Amount</th>
+                        <th className="px-1 pb-2 text-right font-medium">Fee</th>
+                        <th className="px-1 pb-2 text-right font-medium">Margin</th>
+                        <th className="px-1 pb-2 text-left font-medium">Secured by</th>
+                        <th className="px-1 pb-2 text-right font-medium">Outcome</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.advances.map((a) => (
+                        <tr key={`${a.nonce}-${a.drawTx ?? ""}`} className="border-b last:border-0">
+                          <td className="px-1 py-2.5 tabular text-muted-foreground">{a.nonce}</td>
+                          <td className="px-1 py-2.5">
+                            {a.drawnAt ? new Date(a.drawnAt * 1000).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="px-1 py-2.5 text-right tabular font-medium">{usd(a.principal)}</td>
+                          <td className="px-1 py-2.5 text-right tabular">{usd(a.fee)}</td>
+                          <td className="px-1 py-2.5 text-right tabular">{pct(a.marginBps, 0)}</td>
+                          <td className="px-1 py-2.5 text-muted-foreground">
+                            {a.collateral === "token" ? "Escrowed tokens" : "A fee stream"}
+                          </td>
+                          <td className="px-1 py-2.5 text-right">
+                            <StatusWord>
+                              {a.status === "repaid"
+                                ? a.wasLate ? "Repaid late" : "Repaid"
+                                : a.status === "liquidated" ? "Liquidated" : "Open"}
+                            </StatusWord>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-4 flex items-start gap-2 text-caption leading-relaxed text-muted-foreground">
+                  <HistoryIcon className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+                  Reconstructed from the program's own events, not from anything Float stores.
+                  Any wallet can read exactly this, which is what makes the record portable.
+                  {history.truncated && (
+                    <> Devnet rate-limited part of the lookup, so this list is short of your{" "}
+                    {position?.record.advancesTaken ?? 0} advances — reload to fetch the rest.</>
+                  )}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Wallet */}
       <div>

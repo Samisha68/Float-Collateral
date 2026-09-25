@@ -27,6 +27,10 @@ import {
 } from "./chain";
 
 const DBC_PROGRAM_ID = new PublicKey("dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN");
+/* Meteora's VirtualPool: 424 bytes, creator at 104. Both are verified against
+   live accounts in the program's dbc.rs and re-checked on every read there. */
+const VIRTUAL_POOL_LEN = 424;
+const VP_CREATOR = 104;
 const USDC_MINT = new PublicKey(config.usdcMint);
 
 /** Meteora's own PDAs, derived the way its SDK derives them. */
@@ -54,6 +58,63 @@ async function ensureUsdcAccount(owner: PublicKey, tx: Transaction) {
     tx.add(createAssociatedTokenAccountInstruction(owner, ata, owner, USDC_MINT));
   }
   return ata;
+}
+
+/* ── Finding a pool ──────────────────────────────────────────────────────────
+
+   Asking a borrower to paste a pool address assumes they know it. Someone who
+   launched a token weeks ago almost certainly does not, and an empty text
+   field is a dead end with no way out of it — there is nowhere on this screen
+   to go and look.
+
+   Meteora stores the creator inside the pool account, so the pools a wallet
+   owns can simply be asked for: every VirtualPool is 424 bytes and carries the
+   creator at a fixed offset Float already verified against mainnet. */
+
+export type FoundPool = { address: string; creator: string; pledged: boolean };
+
+export async function findMyPools(owner: PublicKey): Promise<FoundPool[]> {
+  const float = poolAuthorityPda().toBase58();
+  const held = await connection.getProgramAccounts(DBC_PROGRAM_ID, {
+    filters: [
+      { dataSize: VIRTUAL_POOL_LEN },
+      { memcmp: { offset: VP_CREATOR, bytes: owner.toBase58() } },
+    ],
+    dataSlice: { offset: 0, length: 0 },
+  });
+
+  /* Pools already pledged sit under Float's authority, not the borrower's, so
+     the same query run against Float finds the ones this wallet handed over.
+     Without this a borrower who pledged and released would think their pool
+     had vanished. */
+  const pledged = await connection.getProgramAccounts(DBC_PROGRAM_ID, {
+    filters: [
+      { dataSize: VIRTUAL_POOL_LEN },
+      { memcmp: { offset: VP_CREATOR, bytes: float } },
+    ],
+    dataSlice: { offset: 0, length: 0 },
+  });
+
+  const mine = held.map((a) => ({
+    address: a.pubkey.toBase58(), creator: owner.toBase58(), pledged: false,
+  }));
+
+  /* A pledged pool does not say whose it was, so it is matched through
+     Float's own pledge records rather than guessed. */
+  let minePledged: FoundPool[] = [];
+  if (pledged.length > 0) {
+    try {
+      const pledges = await (program.account as any).pledgedPool.all([
+        { memcmp: { offset: 8, bytes: owner.toBase58() } },
+      ]);
+      const ours = new Set(pledges.map((p: any) => p.account.pool.toBase58()));
+      minePledged = pledged
+        .filter((a) => ours.has(a.pubkey.toBase58()))
+        .map((a) => ({ address: a.pubkey.toBase58(), creator: float, pledged: true }));
+    } catch { /* the finder is a convenience; the address field still works */ }
+  }
+
+  return [...mine, ...minePledged];
 }
 
 /* ── Pledging a pool ─────────────────────────────────────────────────────── */
@@ -322,7 +383,13 @@ export async function checkCollateralMint(address: string, owner: PublicKey): Pr
     } catch { /* an unreadable feed is the same as no feed */ }
   }
   if (price === null)
-    return { ok: false, reason: "Float has not posted a price for this token, so it cannot be valued." };
+    return {
+      ok: false,
+      reason:
+        "Float has not posted a price for this token, so it cannot value it as collateral. " +
+        "On devnet Float publishes prices itself and only for tokens it has listed — there is no " +
+        "oracle to look one up from. Use the test token below to walk this rail.",
+    };
 
   return { ok: true, mint, decimals: info.decimals, tokenProgram: info.tokenProgram, balance, price };
 }
