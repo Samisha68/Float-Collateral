@@ -205,6 +205,11 @@ Judges forgive a prototype's limits. They do not forgive a prototype that hides 
   gap happens to leave them. Nobody is paid to watch. If a price gaps straight through
   100% coverage, the loss is Float's. A production design needs both; neither is built.
 - **One collateral at a time.** A business posts a fee stream or tokens, not both.
+- **Only tokens Float has priced.** There is no oracle to look up an arbitrary mint, so the
+  token rail accepts the mints Float has listed and says so rather than failing later.
+- **History is reconstructed from events.** A borrower's past advances are read from the
+  program's transaction log, which devnet rate-limits. When the lookup comes back short the
+  app says so instead of showing a partial history as though it were the whole one.
 
 What is not a stand-in: the program, the Meteora integration, the pledge, the
 collection, and every repayment in the record. Those are all real transactions on
