@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { AppShell, type Tab } from "@/components/AppShell";
 import Journey from "@/screens/Journey";
+import Profile from "@/screens/Profile";
 import Compare from "@/screens/Compare";
 import About from "@/screens/About";
 import { useConnected } from "@/lib/useConnected";
 
 const TITLES: Record<Tab, string> = {
   account: "Your account",
+  profile: "Your profile",
   compare: "Why terms differ",
   about: "How this works",
 };
@@ -18,6 +20,7 @@ export default function App() {
   return (
     <AppShell tab={tab} setTab={setTab} title={TITLES[tab]}>
       {tab === "account" && <Journey position={position} loading={loading} refresh={refresh} />}
+      {tab === "profile" && <Profile position={position} loading={loading} />}
       {tab === "compare" && <Compare />}
       {tab === "about" && <About />}
     </AppShell>

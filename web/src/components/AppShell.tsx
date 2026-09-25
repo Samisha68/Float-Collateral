@@ -9,16 +9,17 @@
    the same rule a red badge would. */
 
 import type { ReactNode } from "react";
-import { Building2, Scale, BookOpen, ExternalLink } from "lucide-react";
+import { Building2, Scale, BookOpen, ExternalLink, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConnectButton, WalletChip } from "@/wallet";
 import { config } from "@/lib/chain";
 import { explorer } from "@/lib/format";
 
-export type Tab = "account" | "compare" | "about";
+export type Tab = "account" | "profile" | "compare" | "about";
 
 const NAV: { id: Tab; label: string; icon: typeof Building2 }[] = [
   { id: "account", label: "Your account", icon: Building2 },
+  { id: "profile", label: "Your profile", icon: User },
   { id: "compare", label: "Why terms differ", icon: Scale },
   { id: "about", label: "How this works", icon: BookOpen },
 ];
@@ -31,6 +32,7 @@ export function AppShell({
   title: string;
   children: ReactNode;
 }) {
+  const onProfile = () => setTab("profile");
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
@@ -87,7 +89,7 @@ export function AppShell({
         <h1 className="text-body font-medium tracking-tight max-lg:sr-only">{title}</h1>
         <div className="flex items-center gap-3">
           <WalletChip />
-          <ConnectButton />
+          <ConnectButton onProfile={onProfile} />
         </div>
       </header>
 
