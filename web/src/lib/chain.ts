@@ -16,6 +16,10 @@ export const RPC = (import.meta as any).env?.VITE_RPC_URL || config.rpc;
 export const connection = new Connection(RPC, "confirmed");
 export const PROGRAM_ID = new PublicKey(config.programId);
 export const MARKET_VERSION = Uint8Array.from([2]);
+/* The loan PDA is versioned separately from the market. Adding the token rail
+   changed Loan's layout, so loans written by the previous program cannot be
+   read by this one; a new seed lets both exist rather than misreading bytes. */
+export const LOAN_VERSION = Uint8Array.from([2]);
 export { config };
 
 const readOnlyWallet = {
@@ -39,7 +43,11 @@ export const poolAuthorityPda = () => pda(enc.encode("pool_authority"));
 export const verificationPda = (w: PublicKey) => pda(enc.encode("verification"), w.toBuffer());
 export const recordPda = (w: PublicKey) => pda(enc.encode("record"), w.toBuffer());
 export const pledgePda = (pool: PublicKey) => pda(enc.encode("pledge"), pool.toBuffer());
-export const loanPda = (w: PublicKey) => pda(enc.encode("loan"), w.toBuffer());
+export const loanPda = (w: PublicKey) => pda(enc.encode("loan"), LOAN_VERSION, w.toBuffer());
+export const priceFeedPda = (mint: PublicKey) => pda(enc.encode("price"), mint.toBuffer());
+export const tokenVaultPda = (mint: PublicKey) => pda(enc.encode("token_vault"), mint.toBuffer());
+export const tokenCollateralPda = (w: PublicKey, mint: PublicKey) =>
+  pda(enc.encode("token_collateral"), w.toBuffer(), mint.toBuffer());
 
 export type Verification = {
   verified: boolean;
@@ -65,7 +73,22 @@ export type Pledge = {
   released: boolean;
 };
 
+export type PriceFeed = {
+  mint: string;
+  price: bigint;
+  updatedAt: number;
+  publisher: string;
+};
+
+export type TokenPosition = {
+  borrower: string;
+  mint: string;
+  amount: bigint;
+};
+
 export type Loan = {
+  collateralKind: "feeStream" | "token";
+  collateralRef: string;
   principal: bigint;
   fee: bigint;
   totalDue: bigint;
@@ -155,6 +178,8 @@ function shapePledge(p: any): Pledge {
 
 function shapeLoan(l: any): Loan {
   return {
+    collateralKind: Object.keys(l.collateralKind)[0] as Loan["collateralKind"],
+    collateralRef: l.collateralRef.toBase58(),
     principal: big(l.principal),
     fee: big(l.fee),
     totalDue: big(l.totalDue),
@@ -168,6 +193,54 @@ function shapeLoan(l: any): Loan {
     nonce: big(l.nonce),
     status: Object.keys(l.status)[0] as Loan["status"],
   };
+}
+
+function shapePriceFeed(f: any): PriceFeed {
+  return {
+    mint: f.mint.toBase58(),
+    price: big(f.price),
+    updatedAt: Number(f.updatedAt),
+    publisher: f.publisher.toBase58(),
+  };
+}
+
+function shapeTokenPosition(t: any): TokenPosition {
+  return {
+    borrower: t.borrower.toBase58(),
+    mint: t.mint.toBase58(),
+    amount: big(t.amount),
+  };
+}
+
+/** A borrower's escrowed token collateral, if they have any.
+
+    A wallet does not know which mints it has posted, so this asks the program
+    for the positions it owns rather than guessing a mint. Only one is used
+    at a time; a business posting two different tokens is out of scope. */
+export async function findTokenCollateral(
+  wallet: PublicKey,
+): Promise<{ position: TokenPosition; price: PriceFeed | null; decimals: number } | null> {
+  let found: any;
+  try {
+    const all = await (program.account as any).tokenCollateral.all([
+      { memcmp: { offset: 8, bytes: wallet.toBase58() } },
+    ]);
+    found = all.find((a: any) => big(a.account.amount) > 0n) ?? all[0];
+  } catch {
+    return null;
+  }
+  if (!found) return null;
+
+  const position = shapeTokenPosition(found.account);
+  const mint = new PublicKey(position.mint);
+  const [feedData, mintInfo] = await Promise.all([
+    fetchMany([priceFeedPda(mint)]).then((d) => d[0]),
+    connection.getParsedAccountInfo(mint, "confirmed"),
+  ]);
+  const feed = decode<any>("priceFeed", feedData);
+  const decimals =
+    (mintInfo.value?.data as any)?.parsed?.info?.decimals ?? 9;
+  return { position, price: feed ? shapePriceFeed(feed) : null, decimals };
 }
 
 /** Every Float account for one borrower, plus the market, in one request. */

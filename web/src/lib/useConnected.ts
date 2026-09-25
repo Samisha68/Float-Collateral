@@ -8,20 +8,34 @@
 import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { getFloatAccounts, getPool, type Verification, type Record_, type Pledge, type Loan, type PoolView } from "./chain";
+import {
+  getFloatAccounts, getPool, findTokenCollateral,
+  type Verification, type Record_, type Pledge, type Loan, type PoolView,
+  type TokenPosition, type PriceFeed,
+} from "./chain";
+import type { CollateralKind } from "./pricing";
 
 export type Stage =
   | "disconnected"
   | "unverified"   // connected, no approved credit yet
-  | "unpledged"    // verified, but nothing securing a draw
-  | "ready"        // pledged, can draw
+  | "unsecured"    // verified, but nothing securing a draw
+  | "ready"        // something is posted, can draw
   | "drawn";       // a loan is open
 
 export type Market = Awaited<ReturnType<typeof getFloatAccounts>>["market"];
 
+export type TokenCollateral = {
+  position: TokenPosition;
+  price: PriceFeed | null;
+  decimals: number;
+};
+
 export type Position = {
   wallet: PublicKey;
   stage: Stage;
+  /** Which rail is actually securing this borrower right now. Null until one
+      is. Derived from the chain, never from what this app remembered. */
+  rail: CollateralKind | null;
   market: Market;
   verification: Verification | null;
   record: Record_;
@@ -31,6 +45,7 @@ export type Position = {
   poolAddress: string | null;
   observedSecs: number;
   observedCreatorFees: bigint;
+  token: TokenCollateral | null;
 };
 
 /** A pledge is keyed by pool, so finding a wallet's pledge means asking the
@@ -62,7 +77,10 @@ export function useConnected() {
     setLoading(true);
     (async () => {
       try {
-        const poolAddress = await findPledgedPool(publicKey);
+        const [poolAddress, token] = await Promise.all([
+          findPledgedPool(publicKey),
+          findTokenCollateral(publicKey),
+        ]);
         const poolKey = poolAddress ? new PublicKey(poolAddress) : null;
         const [accounts, pool] = await Promise.all([
           getFloatAccounts(publicKey, poolKey),
@@ -79,15 +97,27 @@ export function useConnected() {
           observedSecs = Math.max(0, Math.floor(Date.now() / 1000) - pledge.pledgedAt);
         }
 
+        const hasPledge = !!pledge && !pledge.released;
+        const hasTokens = !!token && token.position.amount > 0n;
+
         const stage: Stage =
           !verification?.verified ? "unverified"
           : loan && loan.status === "active" ? "drawn"
-          : pledge && !pledge.released ? "ready"
-          : "unpledged";
+          : hasPledge || hasTokens ? "ready"
+          : "unsecured";
+
+        /* An open loan knows which rail it came from, so it wins. Otherwise
+           whichever collateral is actually posted decides, and a borrower
+           holding both is shown the fee stream because it collects itself. */
+        const rail: CollateralKind | null =
+          loan && loan.status === "active" ? loan.collateralKind
+          : hasPledge ? "feeStream"
+          : hasTokens ? "token"
+          : null;
 
         setPosition({
-          wallet: publicKey, stage, market, verification, record, pledge, loan, pool,
-          poolAddress, observedSecs, observedCreatorFees,
+          wallet: publicKey, stage, rail, market, verification, record, pledge, loan, pool,
+          poolAddress, observedSecs, observedCreatorFees, token,
         });
       } finally {
         if (live) setLoading(false);

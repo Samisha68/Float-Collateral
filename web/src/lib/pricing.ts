@@ -7,7 +7,23 @@
    The rule the shape encodes: a repayment record buys a better price, never a
    bigger advance. */
 
+/* Two rails, one ladder.
+
+   A fee stream cannot be seized. If it dries up, Float's recourse is the
+   record and the borrower's own USDC, so the record has to do the
+   underwriting and the rail starts at 150%.
+
+   An escrowed token CAN be seized, which sounds safer and is — but its price
+   moves while the loan is open, and a seizure at the wrong moment recovers
+   less than the screen said it was worth. So it starts higher, at 200%, and
+   walks the same six steps down.
+
+   The asset decides where you begin. The record is what moves you. */
+export type CollateralKind = "feeStream" | "token";
+
 export const BASE_MARGIN_BPS = 15_000;
+/** +50 points on the token rail: 200% down to 170%. */
+export const TOKEN_HAIRCUT_BPS = 5_000;
 export const MARGIN_STEP_BPS = 500;
 export const FEE_STEP_BPS = 10;
 export const RECORD_STEPS = 6;
@@ -19,6 +35,26 @@ const RATE_POINTS: [number, number][] = [
 /** Coverage required: 150% at no record, 120% at six repayments. */
 export function marginBps(repayments: number): number {
   return BASE_MARGIN_BPS - Math.min(repayments, RECORD_STEPS) * MARGIN_STEP_BPS;
+}
+
+/** Coverage required on a given rail. */
+export function marginBpsFor(kind: CollateralKind, repayments: number): number {
+  return marginBps(repayments) + (kind === "token" ? TOKEN_HAIRCUT_BPS : 0);
+}
+
+/** What a holding is worth in USDC, at a posted price. Mirrors the program's
+    `token_value_usdc`: integer division, so it rounds the borrower's way. */
+export function tokenValueUsdc(amount: bigint, price: bigint, decimals: number): bigint {
+  return (amount * price) / 10n ** BigInt(decimals);
+}
+
+/** The most a given collateral value can carry on a rail. This is the number
+    the user asked for: you get the value of your collateral, not the value of
+    your ask. */
+export function collateralCeiling(
+  value: bigint, kind: CollateralKind, repayments: number,
+): bigint {
+  return (value * 10_000n) / BigInt(marginBpsFor(kind, repayments));
 }
 
 /** The published fee for a term, before any record discount. */
@@ -45,19 +81,21 @@ export function feeAmount(principal: bigint, days: number, repayments: number): 
   return num % 10_000n === 0n ? num / 10_000n : num / 10_000n + 1n;
 }
 
-/** Coverage a draw needs at this borrower's tier. */
-export function coverageRequired(draw: bigint, repayments: number): bigint {
-  const m = BigInt(marginBps(repayments));
+/** Coverage a draw needs at this borrower's tier, on a given rail. */
+export function coverageRequired(
+  draw: bigint, repayments: number, kind: CollateralKind = "feeStream",
+): bigint {
+  const m = BigInt(marginBpsFor(kind, repayments));
   const num = draw * m;
   return num % 10_000n === 0n ? num / 10_000n : num / 10_000n + 1n;
 }
 
 /** What one more repayment would change. Null once the record stops earning. */
-export function nextStep(repayments: number) {
+export function nextStep(repayments: number, kind: CollateralKind = "feeStream") {
   if (repayments >= RECORD_STEPS) return null;
   return {
-    marginFrom: marginBps(repayments) / 100,
-    marginTo: marginBps(repayments + 1) / 100,
+    marginFrom: marginBpsFor(kind, repayments) / 100,
+    marginTo: marginBpsFor(kind, repayments + 1) / 100,
     remaining: RECORD_STEPS - repayments,
   };
 }
