@@ -21,7 +21,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Headline, Rows, StatusWord, KeyLink } from "@/components/ui-kit";
 import { SectionHeading } from "@/components/AppShell";
-import { ConnectButton } from "@/wallet";
 import { cn } from "@/lib/utils";
 import { usd, pct, annualised, duration, plural } from "@/lib/format";
 import {
@@ -84,53 +83,14 @@ function Progress({ stage }: { stage: Stage }) {
   );
 }
 
+/* Only ever rendered for a connected wallet — App routes a signed-out
+   visitor to the website instead, so there is no disconnected state here. */
 export default function Journey({
   position, refresh, loading,
 }: { position: Position | null; refresh: () => void; loading: boolean }) {
   const { publicKey, sendTransaction } = useWallet();
   const send = (tx: any, conn: any) => sendTransaction(tx, conn);
-
-  if (!publicKey) {
-    return (
-      <div className="space-y-8">
-        <div className="space-y-5">
-          <h2 className="max-w-[19ch] text-display font-semibold leading-[1.12] tracking-[-0.03em]">
-            Working capital against what your business already holds.
-          </h2>
-          <p className="max-w-[56ch] text-lead leading-relaxed text-muted-foreground">
-            Float lends USDC to verified businesses against one of two things: the trading fees
-            your Meteora pool already earns, or tokens you hold and escrow. Your approved credit
-            is fixed either way. What you put up decides the price — and every advance you repay
-            makes the next one cheaper.
-          </p>
-          <div className="flex items-center gap-3 pt-1">
-            <ConnectButton size="lg" />
-            <span className="text-caption text-muted-foreground">
-              Devnet · any Solana wallet
-            </span>
-          </div>
-        </div>
-
-        <Progress stage="disconnected" />
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[
-            { icon: ShieldCheck, t: "Get verified", d: "A short business check sets your approved credit limit. It does not change after that." },
-            { icon: Link2, t: "Choose your security", d: "A Meteora fee stream at 150%, or tokens in escrow at 200%. Different risks, different prices." },
-            { icon: ArrowDownToLine, t: "Draw and repay", d: "Draw up to what your collateral supports. Six repayments take 30 points off what you post." },
-          ].map(({ icon: Icon, t, d }) => (
-            <Card key={t} className="shadow-none">
-              <CardContent className="space-y-2">
-                <Icon className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-                <div className="text-body font-medium">{t}</div>
-                <p className="text-meta leading-relaxed text-muted-foreground">{d}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (!publicKey) return null;
 
   if (loading && !position)
     return (
