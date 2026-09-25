@@ -162,6 +162,23 @@ as much as sustaining one.
 All of it is integer arithmetic with `u128` intermediates. No floating point touches
 money anywhere in the program.
 
+## Signing in
+
+A business does not necessarily have a browser extension holding a Solana keypair, and
+requiring one turns "apply for credit" into "install software first". So there are two
+ways in:
+
+- **Email or Google.** Privy provisions an embedded Solana wallet the user controls.
+- **A browser wallet.** Anything speaking the Wallet Standard.
+
+They are not two code paths. Privy's embedded wallet implements the Wallet Standard, so
+it is registered into the same registry the adapter already reads, and every screen,
+action and `useWallet()` call downstream is identical either way. The chain cannot tell
+which route a signature came from.
+
+Privy needs an app ID, which `.env.example` documents. Without one Float still works and
+simply asks for a browser wallet, as it did before.
+
 ## Honesty
 
 Judges forgive a prototype's limits. They do not forgive a prototype that hides them.

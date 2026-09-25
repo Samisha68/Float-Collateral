@@ -73,8 +73,9 @@ export default function Profile({
           Your profile lives on the chain, not in an account here.
         </h2>
         <p className="max-w-[54ch] text-lead leading-relaxed text-muted-foreground">
-          Float has no login and no password. Your wallet is the identity, and everything below
-          is read back from devnet whenever you connect it.
+          Sign in with your email and Float gives you a wallet, or connect one you already have.
+          Either way the wallet is the identity and everything below is read back from devnet —
+          Float stores no profile of its own.
         </p>
         <ConnectButton size="lg" />
       </div>
