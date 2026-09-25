@@ -81,11 +81,11 @@ export function SiteShell({
       <main className="flex-1">{children}</main>
 
       <footer className="border-t">
+        {/* The devnet caveat is stated once, on the page, where it is read.
+            Repeating it here made the footer a second copy of the section
+            above it. */}
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6">
-          <p className="max-w-[52ch] text-caption leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">Devnet.</span> No real money moves. The
-            USDC is a test mint Float controls, and verification is done by Float's own key.
-          </p>
+          <p className="text-caption text-muted-foreground">Float · Solana devnet</p>
           <a
             href={explorer(config.programId)}
             target="_blank"

@@ -64,12 +64,19 @@ export function Privy({ children }: { children: ReactNode }) {
           solana: { createOnLogin: "users-without-wallets" },
           ethereum: { createOnLogin: "off" },
         },
-        /* Email and Google only. Privy's modal can also connect an external
-           wallet, but Float already has its own button for that, wired to the
-           adapter the rest of the app reads. Offering both put two different
-           routes to the same place on one screen, one of which bypassed the
-           registry everything downstream depends on. */
-        loginMethods: ["email", "google"],
+        /* One door, and the branching happens inside it.
+
+           Float used to put "Sign in" and "Connect a wallet" side by side on
+           every call to action, which is two doors to the same room and a
+           decision the visitor should not have to make. Worse, it was
+           incoherent: signing in with Privy *gives* you a wallet, so being
+           asked to connect one first made no sense.
+
+           So Privy handles all three. `useStandardWallets` is Privy's Standard
+           Wallet implementation for every Solana wallet it knows about, not
+           only the embedded one, so a wallet connected here reaches the
+           adapter through the same bridge. */
+        loginMethods: ["email", "google", "wallet"],
         appearance: {
           theme: "light",
           accentColor: "#000000",

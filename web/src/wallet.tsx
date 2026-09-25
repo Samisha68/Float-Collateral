@@ -9,6 +9,7 @@ import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-ad
 import { WalletModalProvider, useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
   Wallet as WalletIcon, LogOut, Copy, Check, ExternalLink, RefreshCw, ChevronDown, User, Mail,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -179,10 +180,12 @@ function WalletMenu({ onProfile }: { onProfile?: () => void }) {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onSelect={() => setVisible(true)}>
-          <RefreshCw strokeWidth={1.75} />
-          Switch wallet
-        </DropdownMenuItem>
+        {!session.enabled && (
+          <DropdownMenuItem onSelect={() => setVisible(true)}>
+            <RefreshCw strokeWidth={1.75} />
+            Switch wallet
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem onSelect={() => { void signOut(); }}>
           <LogOut strokeWidth={1.75} />
@@ -194,12 +197,14 @@ function WalletMenu({ onProfile }: { onProfile?: () => void }) {
 }
 
 export function ConnectButton({
-  size = "sm", onProfile,
-}: { size?: "sm" | "lg"; onProfile?: () => void }) {
+  size = "sm", onProfile, label,
+}: { size?: "sm" | "lg"; onProfile?: () => void; label?: string }) {
   const { publicKey, connecting } = useWallet();
   const { setVisible } = useWalletModal();
   const session = usePrivySession();
   const big = size === "lg";
+
+  if (publicKey) return <WalletMenu onProfile={onProfile} />;
 
   if (connecting)
     return (
@@ -209,47 +214,56 @@ export function ConnectButton({
       </Button>
     );
 
-  if (publicKey) return <WalletMenu onProfile={onProfile} />;
-
-  /* Signed in, but the embedded wallet has not finished being provisioned or
-     registered yet. Saying so beats showing "sign in" to someone who just
-     did. */
+  /* Signed in, but no wallet has reached the adapter yet. Usually a second or
+     two while Privy provisions one. */
   if (session.enabled && session.authenticated)
+    return <Provisioning big={big} />;
+
+  /* One button. Where the visitor goes after pressing it — email, Google, or
+     their own wallet — is Privy's question to ask, not the landing page's. */
+  const open = session.enabled ? session.login : () => setVisible(true);
+
+  return (
+    <Button size={big ? "lg" : "sm"} className="min-h-11" onClick={open}>
+      {session.enabled
+        ? <Mail className="size-4" strokeWidth={1.75} />
+        : <WalletIcon className="size-4" strokeWidth={1.75} />}
+      {label ?? (big ? "Get started" : "Sign in")}
+    </Button>
+  );
+}
+
+/* Privy says the user is authenticated but no wallet has appeared in the
+   adapter's registry. Normally that is a moment. If it lasts, something in
+   the bridge did not fire, and offering a way through beats a spinner that
+   never resolves — this is a recovery path, not a second front door, so it
+   only appears once waiting has plainly failed. */
+function Provisioning({ big }: { big: boolean }) {
+  const { setVisible } = useWalletModal();
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => setStuck(true), 8000);
+    return () => clearTimeout(id);
+  }, []);
+
+  if (!stuck)
     return (
       <Button size={big ? "lg" : "sm"} className="min-h-11" disabled>
-        <WalletIcon className="size-4 animate-pulse" strokeWidth={1.75} />
+        <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
         Preparing your wallet…
       </Button>
     );
 
-  /* Without Privy, Float asks for a browser wallet exactly as it always did. */
-  if (!session.enabled)
-    return (
-      <Button size={big ? "lg" : "sm"} className="min-h-11" onClick={() => setVisible(true)}>
-        <WalletIcon className="size-4" strokeWidth={1.75} />
-        Connect wallet
-      </Button>
-    );
-
-  /* With Privy, email leads. A business owner short of cash on Friday should
-     not have to install a browser extension before they can ask for credit,
-     and the people who already have one are the ones who will recognise
-     "connect a wallet" as the secondary option. */
   return (
-    <div className="flex items-center gap-2">
-      <Button size={big ? "lg" : "sm"} className="min-h-11" disabled={!session.ready} onClick={session.login}>
-        <Mail className="size-4" strokeWidth={1.75} />
-        {big ? "Sign in to apply" : "Sign in"}
-      </Button>
-      <Button
-        variant="outline"
-        size={big ? "lg" : "sm"}
-        className="min-h-11"
-        onClick={() => setVisible(true)}
-      >
-        <WalletIcon className="size-4" strokeWidth={1.75} />
-        {big ? "Connect a wallet" : "Wallet"}
-      </Button>
-    </div>
+    <Button
+      variant="outline"
+      size={big ? "lg" : "sm"}
+      className="min-h-11"
+      onClick={() => setVisible(true)}
+    >
+      <WalletIcon className="size-4" strokeWidth={1.75} />
+      Connect your wallet
+    </Button>
   );
 }
