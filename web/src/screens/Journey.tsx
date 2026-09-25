@@ -10,7 +10,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import {
   Wallet, ShieldCheck, Link2, ArrowDownToLine, RotateCcw, Check,
-  CircleAlert, ArrowUpRight, Loader2,
+  CircleAlert, ArrowUpRight, Loader2, Clock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
 import { projectFees } from "@/lib/chain";
 import * as act from "@/lib/actions";
 import type { Position, Stage } from "@/lib/useConnected";
+import { explainError } from "@/lib/errors";
 import Apply from "./steps/Apply";
 import Pledge from "./steps/Pledge";
 import Choose from "./steps/Choose";
@@ -209,8 +210,28 @@ function Active({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [balance, setBalance] = useState<bigint>(0n);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   useEffect(() => { act.usdcBalance(position.wallet).then(setBalance); }, [position.wallet, done]);
+
+  /* Tick only while something is actually waiting on the clock. A timer that
+     runs forever on a settled account is a pointless render every second and
+     a pointless RPC every minute. */
+  const pledgedAt = position.pledge?.pledgedAt ?? 0;
+  const windowEndsAt = pledgedAt + (position.market?.observationSecs ?? 0);
+  const counting = position.stage === "ready" && pledgedAt > 0 && now < windowEndsAt;
+
+  useEffect(() => {
+    if (!counting) return;
+    const id = setInterval(() => {
+      const t = Math.floor(Date.now() / 1000);
+      setNow(t);
+      /* The moment the window closes, reload the position: the projection is
+         computed from fees that accrued while we were waiting. */
+      if (t >= windowEndsAt) onDone();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [counting, windowEndsAt, onDone]);
 
   const n = position.record.advancesRepaid;
   const limit = position.verification?.creditLimit ?? 0n;
@@ -232,7 +253,7 @@ function Active({
       setDone(await fn());
       onDone();
     } catch (e: any) {
-      setError(e?.error?.errorMessage || e?.message || String(e));
+      setError(explainError(e));
     } finally {
       setBusy(null);
     }
@@ -394,18 +415,47 @@ function Active({
   const ceiling = capacity < limit ? capacity : limit;
   const boundBy = capacity < limit ? "collateral" : "limit";
 
+  /* The observation window.
+
+     The program will not project a run rate from a pool it has barely
+     watched, and refuses the draw outright. Nothing on this screen used to
+     say so, so a borrower who had just pledged filled in an amount, signed,
+     and had ObservationWindowNotElapsed thrown at them — which broke the one
+     rule actions.ts opens by stating, that a wallet prompt means the
+     transaction is expected to succeed.
+
+     It applies only to the fee-stream rail. Escrowed tokens are valued at a
+     posted price, not observed over time, so there is nothing to wait for. */
+  const windowSecs = position.market?.observationSecs ?? 0;
+  /* Counted from the pledge rather than from the snapshot, so the number on
+     screen actually falls. `now` ticks once a second while the wait is on and
+     stops as soon as it is over, and the last tick refreshes the position so
+     the projection catches up with the trading that happened meanwhile. */
+  const observedNow = position.pledge
+    ? Math.max(0, now - position.pledge.pledgedAt)
+    : position.observedSecs;
+  const waitingOnWindow = rail === "feeStream" && observedNow < windowSecs;
+  const secsLeft = Math.max(0, windowSecs - observedNow);
+
   const overLimit = draw > limit;
   const underCovered = coverage > (rail === "token" ? collateralValue : projected);
-  const ok = draw > 0n && !overLimit && !underCovered;
+  const ok = draw > 0n && !overLimit && !underCovered && !waitingOnWindow;
 
   return (
     <div>
       <Card className="shadow-none">
         <CardContent className="space-y-6">
+          {/* During the observation window there is no projection yet, and a
+              $0.00 ceiling reads as "your collateral is worth nothing" rather
+              than "Float has not finished measuring". Show what is actually
+              known — the approved limit — and let the note below explain the
+              wait. */}
           <Headline
-            value={usd(ceiling)}
+            value={usd(waitingOnWindow ? limit : ceiling)}
             label={
-              boundBy === "collateral"
+              waitingOnWindow
+                ? "your approved credit, while Float measures your pool"
+                : boundBy === "collateral"
                 ? "the most your collateral can support"
                 : "your approved credit"
             }
@@ -417,26 +467,38 @@ function Active({
               ["Approved credit", usd(limit)],
               [
                 rail === "token" ? "Escrow value" : "Fees projected over the term",
-                usd(rail === "token" ? collateralValue : projected),
+                waitingOnWindow ? (
+                  <span className="font-normal text-muted-foreground">not measured yet</span>
+                ) : (
+                  usd(rail === "token" ? collateralValue : projected)
+                ),
               ],
               [
                 "Which your collateral can carry",
-                <>
-                  {usd(capacity)}
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    at {pct(marginBpsFor(rail, n), 0)}
+                waitingOnWindow ? (
+                  <span className="font-normal text-muted-foreground">
+                    known once the window closes
                   </span>
-                </>,
+                ) : (
+                  <>
+                    {usd(capacity)}
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      at {pct(marginBpsFor(rail, n), 0)}
+                    </span>
+                  </>
+                ),
               ],
-              [
-                "So you can draw up to",
-                <>
-                  {usd(ceiling)}
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    {boundBy === "collateral" ? "capped by your collateral" : "capped by your limit"}
-                  </span>
-                </>,
-              ],
+              ...(waitingOnWindow
+                ? ([] as [React.ReactNode, React.ReactNode][])
+                : ([[
+                    "So you can draw up to",
+                    <>
+                      {usd(ceiling)}
+                      <span className="ml-1.5 font-normal text-muted-foreground">
+                        {boundBy === "collateral" ? "capped by your collateral" : "capped by your limit"}
+                      </span>
+                    </>,
+                  ]] as [React.ReactNode, React.ReactNode][])),
             ]}
           />
 
@@ -475,7 +537,11 @@ function Active({
               ["Coverage this draw needs", usd(coverage)],
               [
                 rail === "token" ? "Coverage you have escrowed" : "Coverage your fees project",
-                usd(rail === "token" ? collateralValue : projected),
+                waitingOnWindow ? (
+                  <span className="font-normal text-muted-foreground">not measured yet</span>
+                ) : (
+                  usd(rail === "token" ? collateralValue : projected)
+                ),
               ],
             ]}
           />
@@ -501,13 +567,29 @@ function Active({
             </Button>
           </div>
 
-          {!ok && draw > 0n && (
+          {waitingOnWindow && (
+            <Note icon={Clock}>
+              Float is watching your pool trade before it will lend against it — that is what
+              turns a fee history into a run rate it can underwrite.{" "}
+              <span className="tabular">{duration(secsLeft)}</span> to go
+              {position.observedCreatorFees > 0n && (
+                <> · {usd(position.observedCreatorFees)} earned so far</>
+              )}
+              .
+            </Note>
+          )}
+
+          {!ok && !waitingOnWindow && draw > 0n && (
             <Note icon={CircleAlert}>
               {overLimit
                 ? `That is over your approved limit of ${usd(limit)}.`
                 : rail === "token"
-                ? `Your escrow is worth ${usd(collateralValue)} and this draw needs ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Escrow more, or draw up to ${usd(ceiling)}.`
-                : `Your pool's projected fees of ${usd(projected)} do not cover ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Give it more trading, or draw up to ${usd(ceiling)}.`}
+                ? ceiling > 0n
+                  ? `Your escrow is worth ${usd(collateralValue)} and this draw needs ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Escrow more, or draw up to ${usd(ceiling)}.`
+                  : `Your escrow is worth ${usd(collateralValue)}, which supports no advance at ${pct(marginBpsFor(rail, n), 0)}. Escrow more before drawing.`
+                : ceiling > 0n
+                ? `Your pool's projected fees of ${usd(projected)} do not cover ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Give it more trading, or draw up to ${usd(ceiling)}.`
+                : `Your pool has not earned enough in fees yet to support an advance. It needs more trading volume before Float can lend against it.`}
             </Note>
           )}
           <Outcome error={error} done={done} />

@@ -24,6 +24,7 @@ import { usd, pct } from "@/lib/format";
 import { collateralCeiling, tokenValueUsdc, marginBpsFor } from "@/lib/pricing";
 import * as act from "@/lib/actions";
 import { demoCollateral } from "@/lib/api";
+import { explainError } from "@/lib/errors";
 
 const amountOf = (raw: bigint, decimals: number) =>
   (Number(raw) / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: 6 });
@@ -57,7 +58,7 @@ export default function Escrow({
       setAddress(t.mint);
       await inspect(t.mint);
     } catch (e: any) {
-      setError(e?.message || String(e));
+      setError(explainError(e));
     } finally { setBusy(null); }
   };
 
@@ -70,7 +71,7 @@ export default function Escrow({
       ));
       onDone();
     } catch (e: any) {
-      setError(e?.error?.errorMessage || e?.message || String(e));
+      setError(explainError(e));
     } finally { setBusy(null); }
   };
 
@@ -120,9 +121,11 @@ export default function Escrow({
               {busy === "demo" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" strokeWidth={1.75} />}
               Send me a test token
             </Button>
-            <p className="max-w-[44ch] text-caption leading-relaxed text-muted-foreground">
-              No token to hand? Float will mint you 500 of a devnet test token and post a price
-              for it, so you can walk the whole flow. It is not a real asset and has no value.
+            <p className="max-w-[46ch] text-caption leading-relaxed text-muted-foreground">
+              Float can only value tokens it has posted a price for, and on devnet it publishes
+              those itself — there is no oracle here. In practice that means this one. It will
+              mint you 500 of a devnet test token and price it, so you can walk the whole rail.
+              It is not a real asset and has no value.
             </p>
           </div>
 
