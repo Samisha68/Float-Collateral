@@ -1,3 +1,5 @@
+use anchor_lang::prelude::*;
+
 /* What an advance costs, and what a repayment record earns.
 
    Ported verbatim in shape from Float's `web/server/pricing.mjs`. The numbers
@@ -60,9 +62,89 @@ pub fn fee_amount(principal: u64, days: u32, repayments: u32) -> Option<u64> {
     u64::try_from(fee).ok()
 }
 
+/// Collateral quality sets the margin; the record improves it.
+///
+/// A fee stream cannot be seized. Float collects it at source, and if the
+/// pool's volume dies there is nothing to sell, so the borrower's record is
+/// doing the underwriting. An escrowed token is the opposite: it can be taken
+/// and sold, but its price moves while Float holds it, so it carries a
+/// haircut on top of the ladder to absorb that move.
+///
+/// The ladder is the same either way. Only the starting point differs, which
+/// is the point: repaying improves the price of credit whatever backs it.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CollateralKind {
+    /// A Meteora DBC creator fee stream. Collected at source, never seized.
+    #[default]
+    FeeStream,
+    /// An escrowed SPL or Token-2022 balance, valued at a posted price.
+    Token,
+}
+
+/// Added to the margin an escrowed token must post, because a price can move
+/// between the last update and a liquidation.
+pub const TOKEN_HAIRCUT_BPS: u32 = 5_000; // +50 points: 200% down to 170%
+
+/// The coverage this borrower must post, for this kind of collateral.
+pub fn margin_bps_for(kind: CollateralKind, repayments: u32) -> u32 {
+    match kind {
+        CollateralKind::FeeStream => margin_bps(repayments),
+        CollateralKind::Token => margin_bps(repayments) + TOKEN_HAIRCUT_BPS,
+    }
+}
+
+/// What an escrowed balance is worth, in USDC base units.
+///
+/// `price` is USDC-6dp per whole token, so the token's own decimals have to
+/// come out. u128 throughout: a 9-decimal balance times a 6-decimal price
+/// overflows u64 long before the numbers get interesting.
+pub fn token_value_usdc(amount: u64, price: u64, decimals: u8) -> Option<u64> {
+    let scale = 10u128.checked_pow(decimals as u32)?;
+    let value = (amount as u128).checked_mul(price as u128)?.checked_div(scale)?;
+    u64::try_from(value).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn token_collateral_posts_more_than_a_fee_stream() {
+        // Same borrower, same record, different collateral. A token can be
+        // seized and sold, but its price moves while Float holds it.
+        for n in 0..=6 {
+            let stream = margin_bps_for(CollateralKind::FeeStream, n);
+            let token = margin_bps_for(CollateralKind::Token, n);
+            assert_eq!(token, stream + TOKEN_HAIRCUT_BPS);
+            assert!(token > stream);
+        }
+        assert_eq!(margin_bps_for(CollateralKind::Token, 0), 20_000); // 200%
+        assert_eq!(margin_bps_for(CollateralKind::Token, 6), 17_000); // 170%
+    }
+
+    #[test]
+    fn the_record_improves_both_rails() {
+        // The whole thesis: whatever backs the loan, repaying makes it cheaper.
+        for kind in [CollateralKind::FeeStream, CollateralKind::Token] {
+            assert!(margin_bps_for(kind, 6) < margin_bps_for(kind, 0));
+            assert_eq!(margin_bps_for(kind, 0) - margin_bps_for(kind, 6), 3_000);
+        }
+    }
+
+    #[test]
+    fn a_nine_decimal_balance_values_without_overflowing() {
+        // 7.3818 tokens at 9dp, priced at $812.79 (USDC 6dp).
+        assert_eq!(token_value_usdc(7_381_900_000, 812_790_000, 9), Some(5_999_934_501));
+        // The same maths at 6dp, so the decimals really are coming out.
+        assert_eq!(token_value_usdc(1_000_000, 812_790_000, 6), Some(812_790_000));
+        // u128 absorbs the product; the guard that matters is the narrowing
+        // back to u64 at the end. A zero-decimal token at a huge price is the
+        // case that exercises it.
+        assert!(token_value_usdc(u64::MAX, 1_000_000_000, 0).is_none());
+        // And a wide balance that does still fit comes back intact.
+        assert_eq!(token_value_usdc(u64::MAX, 1_000_000, 9), Some(18_446_744_073_709_551));
+        assert_eq!(token_value_usdc(0, 812_790_000, 9), Some(0));
+    }
 
     #[test]
     fn margin_ladder_matches_pricing_mjs() {

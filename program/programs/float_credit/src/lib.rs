@@ -40,6 +40,16 @@ pub const VERIFICATION_SEED: &[u8] = b"verification";
 pub const RECORD_SEED: &[u8] = b"record";
 pub const PLEDGE_SEED: &[u8] = b"pledge";
 pub const LOAN_SEED: &[u8] = b"loan";
+/// Bumped when Loan's layout changes. A loan now records which collateral
+/// backs it, so an account written before that field existed must not be
+/// read as though it had one.
+pub const LOAN_VERSION: &[u8] = &[2];
+pub const PRICE_SEED: &[u8] = b"price";
+pub const TOKEN_COLLATERAL_SEED: &[u8] = b"token_collateral";
+pub const TOKEN_VAULT_SEED: &[u8] = b"token_vault";
+
+/// How stale a posted price may be before Float refuses to lend against it.
+pub const MAX_PRICE_AGE_SECS: i64 = 300;
 
 /// Shortest term Float will write, in days.
 pub const MIN_TERM_DAYS: u32 = 1;
@@ -74,7 +84,9 @@ pub mod float_credit {
         market.principal_outstanding = 0;
         market.bump = ctx.bumps.market;
         market.pool_authority_bump = ctx.bumps.pool_authority;
-        market.reserved = [0u8; 64];
+        market.price_publisher = ctx.accounts.admin.key();
+        market.liquidation_margin_bps = 11_000; // 110%
+        market.reserved = [0u8; 30];
         emit!(MarketInitialized {
             admin: market.admin,
             usdc_mint: market.usdc_mint,
@@ -94,6 +106,26 @@ pub mod float_credit {
             FloatError::MarketHasOutstandingPrincipal
         );
         emit!(MarketClosed { admin: ctx.accounts.admin.key() });
+        Ok(())
+    }
+
+    /// Point the token rail at a price publisher and set the level below which
+    /// escrowed collateral may be seized.
+    ///
+    /// Exists because Market gained these two fields out of its own reserve
+    /// rather than by changing size, so a market created before they existed
+    /// deserialises with them zeroed. Re-initialising would have meant
+    /// re-funding the vault and re-pledging live pools; this does not.
+    pub fn set_price_config(
+        ctx: Context<SetPriceConfig>,
+        publisher: Pubkey,
+        liquidation_margin_bps: u16,
+    ) -> Result<()> {
+        require!(liquidation_margin_bps > 10_000, FloatError::InvalidLiquidationMargin);
+        let market = &mut ctx.accounts.market;
+        market.price_publisher = publisher;
+        market.liquidation_margin_bps = liquidation_margin_bps;
+        emit!(PriceConfigSet { publisher, liquidation_margin_bps });
         Ok(())
     }
 
@@ -303,6 +335,8 @@ pub mod float_credit {
         )?;
 
         loan.borrower = ctx.accounts.borrower.key();
+        loan.collateral_kind = pricing::CollateralKind::FeeStream;
+        loan.collateral_ref = pledge.pool;
         loan.pool = pledge.pool;
         loan.principal = amount;
         loan.fee = fee;
@@ -337,6 +371,334 @@ pub mod float_credit {
             projected_fees: projected,
             repayments_at_draw: repayments,
             due_at: loan.due_at,
+        });
+        Ok(())
+    }
+
+
+    // ─────────────────────────────────────────────────────────────
+    // The token rail
+    //
+    // A fee stream is collected at source and can never be seized, so the
+    // borrower's record does the underwriting. An escrowed token is the
+    // opposite: Float holds it, and if the loan sours it can be sold. That
+    // makes it safer per dollar and riskier per day, because the price moves
+    // while Float is holding it. Hence the haircut, and hence a price that
+    // has to be fresh before anyone can borrow against it.
+    // ─────────────────────────────────────────────────────────────
+
+    /// Publish a price for a collateral mint, in USDC base units per whole
+    /// token. Float's own crank signs this, and the README says so: it is a
+    /// relayed price, not an on-chain oracle.
+    pub fn post_price(ctx: Context<PostPrice>, price: u64) -> Result<()> {
+        require!(price > 0, FloatError::InvalidPrice);
+        let clock = Clock::get()?;
+        let feed = &mut ctx.accounts.price_feed;
+        feed.mint = ctx.accounts.collateral_mint.key();
+        feed.price = price;
+        feed.updated_at = clock.unix_timestamp;
+        feed.publisher = ctx.accounts.publisher.key();
+        feed.bump = ctx.bumps.price_feed;
+        emit!(PricePosted {
+            mint: feed.mint,
+            price,
+            updated_at: feed.updated_at,
+        });
+        Ok(())
+    }
+
+    /// Escrow tokens as collateral.
+    ///
+    /// Records what the vault actually received rather than what was asked
+    /// for. A Token-2022 mint may levy a transfer fee, in which case the
+    /// vault is credited less than the borrower sent, and lending against the
+    /// requested figure would leave the vault short by the difference on
+    /// every single deposit.
+    pub fn deposit_token_collateral(ctx: Context<DepositTokenCollateral>, amount: u64) -> Result<()> {
+        require!(amount > 0, FloatError::AmountMustBePositive);
+        require!(ctx.accounts.verification.verified, FloatError::BusinessNotVerified);
+
+        ctx.accounts.token_vault.reload()?;
+        let before = ctx.accounts.token_vault.amount;
+
+        token_interface::transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.borrower_tokens.to_account_info(),
+                    mint: ctx.accounts.collateral_mint.to_account_info(),
+                    to: ctx.accounts.token_vault.to_account_info(),
+                    authority: ctx.accounts.borrower.to_account_info(),
+                },
+            ),
+            amount,
+            ctx.accounts.collateral_mint.decimals,
+        )?;
+
+        ctx.accounts.token_vault.reload()?;
+        let received = ctx
+            .accounts
+            .token_vault
+            .amount
+            .checked_sub(before)
+            .ok_or(FloatError::VaultBalanceWentBackwards)?;
+
+        let position = &mut ctx.accounts.position;
+        if position.borrower == Pubkey::default() {
+            position.borrower = ctx.accounts.borrower.key();
+            position.mint = ctx.accounts.collateral_mint.key();
+            position.bump = ctx.bumps.position;
+        }
+        position.amount = position.amount.checked_add(received).ok_or(FloatError::MathOverflow)?;
+
+        emit!(TokenCollateralDeposited {
+            business: position.borrower,
+            mint: position.mint,
+            requested: amount,
+            received,
+            total: position.amount,
+        });
+        Ok(())
+    }
+
+    /// Draw against escrowed tokens.
+    ///
+    /// Same two gates as the fee-stream rail: the approved limit, which the
+    /// record cannot move, and coverage, which the record improves. The only
+    /// difference is how the collateral is valued and that a token starts
+    /// from a higher margin.
+    pub fn borrow_against_tokens(
+        ctx: Context<BorrowAgainstTokens>,
+        amount: u64,
+        term_days: u32,
+    ) -> Result<()> {
+        require!(amount > 0, FloatError::AmountMustBePositive);
+        require!(
+            (MIN_TERM_DAYS..=MAX_TERM_DAYS).contains(&term_days),
+            FloatError::TermOutOfRange
+        );
+        require!(ctx.accounts.verification.verified, FloatError::BusinessNotVerified);
+
+        let clock = Clock::get()?;
+        let loan = &mut ctx.accounts.loan;
+        require!(loan.status != LoanStatus::Active, FloatError::LoanAlreadyActive);
+
+        // A price nobody has refreshed is not a valuation.
+        let age = clock
+            .unix_timestamp
+            .checked_sub(ctx.accounts.price_feed.updated_at)
+            .ok_or(FloatError::MathOverflow)?;
+        require!(age <= MAX_PRICE_AGE_SECS, FloatError::PriceTooStale);
+
+        let repayments = ctx.accounts.record.advances_repaid;
+        let kind = pricing::CollateralKind::Token;
+        let margin_bps = pricing::margin_bps_for(kind, repayments);
+        let fee = pricing::fee_amount(amount, term_days, repayments)
+            .ok_or(FloatError::MathOverflow)?;
+        let total_due = amount.checked_add(fee).ok_or(FloatError::MathOverflow)?;
+
+        require!(
+            amount <= ctx.accounts.verification.credit_limit,
+            FloatError::ExceedsApprovedCredit
+        );
+
+        let value = pricing::token_value_usdc(
+            ctx.accounts.position.amount,
+            ctx.accounts.price_feed.price,
+            ctx.accounts.collateral_mint.decimals,
+        )
+        .ok_or(FloatError::MathOverflow)?;
+        let required = (amount as u128)
+            .checked_mul(margin_bps as u128)
+            .ok_or(FloatError::MathOverflow)?
+            .div_ceil(10_000u128);
+        require!((value as u128) >= required, FloatError::InsufficientCollateralValue);
+
+        let market_bump = ctx.accounts.market.bump;
+        let seeds: &[&[u8]] = &[MARKET_SEED, MARKET_VERSION, &[market_bump]];
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.usdc_vault.to_account_info(),
+                    mint: ctx.accounts.usdc_mint.to_account_info(),
+                    to: ctx.accounts.borrower_usdc.to_account_info(),
+                    authority: ctx.accounts.market.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+            ctx.accounts.usdc_mint.decimals,
+        )?;
+
+        loan.borrower = ctx.accounts.borrower.key();
+        loan.collateral_kind = kind;
+        loan.collateral_ref = ctx.accounts.collateral_mint.key();
+        loan.pool = Pubkey::default();
+        loan.principal = amount;
+        loan.fee = fee;
+        loan.total_due = total_due;
+        loan.collected = 0;
+        loan.margin_bps = margin_bps as u16;
+        loan.term_days = term_days as u16;
+        loan.projected_at_draw = value;
+        loan.repayments_at_draw = repayments;
+        loan.drawn_at = clock.unix_timestamp;
+        loan.due_at = clock.unix_timestamp + (term_days as i64) * 86_400;
+        loan.nonce = loan.nonce.saturating_add(1);
+        loan.status = LoanStatus::Active;
+        loan.bump = ctx.bumps.loan;
+
+        let record = &mut ctx.accounts.record;
+        record.advances_taken = record.advances_taken.saturating_add(1);
+
+        let market = &mut ctx.accounts.market;
+        market.advances_funded = market.advances_funded.saturating_add(1);
+        market.principal_outstanding = market.principal_outstanding.saturating_add(amount);
+
+        emit!(Drawn {
+            business: loan.borrower,
+            pool: loan.collateral_ref,
+            nonce: loan.nonce,
+            principal: amount,
+            fee,
+            total_due,
+            margin_bps: loan.margin_bps,
+            term_days: loan.term_days,
+            projected_fees: value,
+            repayments_at_draw: repayments,
+            due_at: loan.due_at,
+        });
+        Ok(())
+    }
+
+    /// Take escrowed tokens back. Only when nothing is owed.
+    pub fn withdraw_token_collateral(ctx: Context<WithdrawTokenCollateral>, amount: u64) -> Result<()> {
+        require!(amount > 0, FloatError::AmountMustBePositive);
+        require!(
+            ctx.accounts.loan.status != LoanStatus::Active,
+            FloatError::LoanStillActive
+        );
+        require!(
+            amount <= ctx.accounts.position.amount,
+            FloatError::InsufficientCollateralValue
+        );
+
+        let bump = ctx.accounts.market.bump;
+        let seeds: &[&[u8]] = &[MARKET_SEED, MARKET_VERSION, &[bump]];
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.token_vault.to_account_info(),
+                    mint: ctx.accounts.collateral_mint.to_account_info(),
+                    to: ctx.accounts.borrower_tokens.to_account_info(),
+                    authority: ctx.accounts.market.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+            ctx.accounts.collateral_mint.decimals,
+        )?;
+
+        let position = &mut ctx.accounts.position;
+        position.amount = position.amount.checked_sub(amount).ok_or(FloatError::MathOverflow)?;
+
+        emit!(TokenCollateralWithdrawn {
+            business: position.borrower,
+            mint: position.mint,
+            amount,
+            remaining: position.amount,
+        });
+        Ok(())
+    }
+
+    /// Seize escrowed collateral when it no longer covers the debt.
+    ///
+    /// This is the thing a fee stream cannot do. Anyone may call it: the
+    /// liquidator settles the loan in USDC and takes the tokens, and the
+    /// program checks the position is genuinely under water first, on a
+    /// price that is genuinely fresh.
+    pub fn liquidate_token_collateral(ctx: Context<LiquidateTokenCollateral>) -> Result<()> {
+        let clock = Clock::get()?;
+        let loan = &ctx.accounts.loan;
+        require!(loan.status == LoanStatus::Active, FloatError::NoActiveLoan);
+        require!(
+            loan.collateral_kind == pricing::CollateralKind::Token,
+            FloatError::WrongCollateralKind
+        );
+
+        let age = clock
+            .unix_timestamp
+            .checked_sub(ctx.accounts.price_feed.updated_at)
+            .ok_or(FloatError::MathOverflow)?;
+        require!(age <= MAX_PRICE_AGE_SECS, FloatError::PriceTooStale);
+
+        let value = pricing::token_value_usdc(
+            ctx.accounts.position.amount,
+            ctx.accounts.price_feed.price,
+            ctx.accounts.collateral_mint.decimals,
+        )
+        .ok_or(FloatError::MathOverflow)?;
+
+        // Liquidatable once the collateral no longer clears the debt at the
+        // liquidation margin. Above that line the borrower keeps their term.
+        let threshold = (loan.total_due as u128)
+            .checked_mul(ctx.accounts.market.liquidation_margin_bps as u128)
+            .ok_or(FloatError::MathOverflow)?
+            .div_ceil(10_000u128);
+        require!((value as u128) < threshold, FloatError::PositionIsHealthy);
+
+        token_interface::transfer_checked(
+            CpiContext::new(
+                ctx.accounts.usdc_token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.liquidator_usdc.to_account_info(),
+                    mint: ctx.accounts.usdc_mint.to_account_info(),
+                    to: ctx.accounts.usdc_vault.to_account_info(),
+                    authority: ctx.accounts.liquidator.to_account_info(),
+                },
+            ),
+            loan.total_due.saturating_sub(loan.collected),
+            ctx.accounts.usdc_mint.decimals,
+        )?;
+
+        let seized = ctx.accounts.position.amount;
+        let bump = ctx.accounts.market.bump;
+        let seeds: &[&[u8]] = &[MARKET_SEED, MARKET_VERSION, &[bump]];
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.token_vault.to_account_info(),
+                    mint: ctx.accounts.collateral_mint.to_account_info(),
+                    to: ctx.accounts.liquidator_tokens.to_account_info(),
+                    authority: ctx.accounts.market.to_account_info(),
+                },
+                &[seeds],
+            ),
+            seized,
+            ctx.accounts.collateral_mint.decimals,
+        )?;
+
+        let position = &mut ctx.accounts.position;
+        position.amount = 0;
+
+        let loan = &mut ctx.accounts.loan;
+        loan.status = LoanStatus::Liquidated;
+
+        let record = &mut ctx.accounts.record;
+        record.advances_overdue = record.advances_overdue.saturating_add(1);
+
+        let market = &mut ctx.accounts.market;
+        market.principal_outstanding = market.principal_outstanding.saturating_sub(loan.principal);
+
+        emit!(Liquidated {
+            business: loan.borrower,
+            mint: ctx.accounts.collateral_mint.key(),
+            seized,
+            settled: loan.total_due,
+            collateral_value: value,
         });
         Ok(())
     }
@@ -619,6 +981,14 @@ pub struct CloseMarket<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SetPriceConfig<'info> {
+    #[account(address = market.admin @ FloatError::Unauthorized)]
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+}
+
+#[derive(Accounts)]
 pub struct SetVerifier<'info> {
     #[account(address = market.admin @ FloatError::Unauthorized)]
     pub admin: Signer<'info>,
@@ -718,7 +1088,7 @@ pub struct Borrow<'info> {
         init_if_needed,
         payer = borrower,
         space = Loan::LEN,
-        seeds = [LOAN_SEED, borrower.key().as_ref()],
+        seeds = [LOAN_SEED, LOAN_VERSION, borrower.key().as_ref()],
         bump
     )]
     pub loan: Box<Account<'info, Loan>>,
@@ -756,7 +1126,7 @@ pub struct CollectFees<'info> {
     pub pledge: Box<Account<'info, PledgedPool>>,
     #[account(
         mut,
-        seeds = [LOAN_SEED, pledge.borrower.as_ref()],
+        seeds = [LOAN_SEED, LOAN_VERSION, pledge.borrower.as_ref()],
         bump = loan.bump
     )]
     pub loan: Box<Account<'info, Loan>>,
@@ -790,6 +1160,202 @@ pub struct CollectFees<'info> {
     pub dbc_program: UncheckedAccount<'info>,
 }
 
+
+#[derive(Accounts)]
+pub struct PostPrice<'info> {
+    #[account(mut, address = market.price_publisher @ FloatError::Unauthorized)]
+    pub publisher: Signer<'info>,
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        init_if_needed,
+        payer = publisher,
+        space = PriceFeed::LEN,
+        seeds = [PRICE_SEED, collateral_mint.key().as_ref()],
+        bump
+    )]
+    pub price_feed: Box<Account<'info, PriceFeed>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct DepositTokenCollateral<'info> {
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    #[account(
+        seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
+        bump = verification.bump
+    )]
+    pub verification: Box<Account<'info, BusinessVerification>>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        init_if_needed,
+        payer = borrower,
+        space = TokenCollateral::LEN,
+        seeds = [TOKEN_COLLATERAL_SEED, borrower.key().as_ref(), collateral_mint.key().as_ref()],
+        bump
+    )]
+    pub position: Box<Account<'info, TokenCollateral>>,
+    #[account(
+        init_if_needed,
+        payer = borrower,
+        token::mint = collateral_mint,
+        token::authority = market,
+        token::token_program = token_program,
+        seeds = [TOKEN_VAULT_SEED, collateral_mint.key().as_ref()],
+        bump
+    )]
+    pub token_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = borrower_tokens.mint == collateral_mint.key() @ FloatError::WrongMint,
+        constraint = borrower_tokens.owner == borrower.key() @ FloatError::WrongTokenOwner
+    )]
+    pub borrower_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct BorrowAgainstTokens<'info> {
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    #[account(
+        seeds = [VERIFICATION_SEED, borrower.key().as_ref()],
+        bump = verification.bump
+    )]
+    pub verification: Box<Account<'info, BusinessVerification>>,
+    #[account(
+        mut,
+        seeds = [RECORD_SEED, borrower.key().as_ref()],
+        bump = record.bump
+    )]
+    pub record: Box<Account<'info, BusinessRecord>>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        seeds = [PRICE_SEED, collateral_mint.key().as_ref()],
+        bump = price_feed.bump
+    )]
+    pub price_feed: Box<Account<'info, PriceFeed>>,
+    #[account(
+        seeds = [TOKEN_COLLATERAL_SEED, borrower.key().as_ref(), collateral_mint.key().as_ref()],
+        bump = position.bump,
+        constraint = position.borrower == borrower.key() @ FloatError::PledgeNotYours
+    )]
+    pub position: Box<Account<'info, TokenCollateral>>,
+    #[account(
+        init_if_needed,
+        payer = borrower,
+        space = Loan::LEN,
+        seeds = [LOAN_SEED, LOAN_VERSION, borrower.key().as_ref()],
+        bump
+    )]
+    pub loan: Box<Account<'info, Loan>>,
+    #[account(address = market.usdc_mint @ FloatError::WrongMint)]
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = borrower_usdc.mint == market.usdc_mint @ FloatError::WrongMint,
+        constraint = borrower_usdc.owner == borrower.key() @ FloatError::WrongTokenOwner
+    )]
+    pub borrower_usdc: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawTokenCollateral<'info> {
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        mut,
+        seeds = [TOKEN_COLLATERAL_SEED, borrower.key().as_ref(), collateral_mint.key().as_ref()],
+        bump = position.bump,
+        constraint = position.borrower == borrower.key() @ FloatError::PledgeNotYours
+    )]
+    pub position: Box<Account<'info, TokenCollateral>>,
+    #[account(
+        seeds = [LOAN_SEED, LOAN_VERSION, borrower.key().as_ref()],
+        bump = loan.bump
+    )]
+    pub loan: Box<Account<'info, Loan>>,
+    #[account(mut, seeds = [TOKEN_VAULT_SEED, collateral_mint.key().as_ref()], bump)]
+    pub token_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = borrower_tokens.mint == collateral_mint.key() @ FloatError::WrongMint,
+        constraint = borrower_tokens.owner == borrower.key() @ FloatError::WrongTokenOwner
+    )]
+    pub borrower_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct LiquidateTokenCollateral<'info> {
+    /// Anyone may liquidate. The program checks the position, not the caller.
+    #[account(mut)]
+    pub liquidator: Signer<'info>,
+    #[account(mut, seeds = [MARKET_SEED, MARKET_VERSION], bump = market.bump)]
+    pub market: Box<Account<'info, Market>>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        seeds = [PRICE_SEED, collateral_mint.key().as_ref()],
+        bump = price_feed.bump
+    )]
+    pub price_feed: Box<Account<'info, PriceFeed>>,
+    #[account(
+        mut,
+        seeds = [TOKEN_COLLATERAL_SEED, position.borrower.as_ref(), collateral_mint.key().as_ref()],
+        bump = position.bump
+    )]
+    pub position: Box<Account<'info, TokenCollateral>>,
+    #[account(
+        mut,
+        seeds = [LOAN_SEED, LOAN_VERSION, position.borrower.as_ref()],
+        bump = loan.bump
+    )]
+    pub loan: Box<Account<'info, Loan>>,
+    #[account(
+        mut,
+        seeds = [RECORD_SEED, position.borrower.as_ref()],
+        bump = record.bump
+    )]
+    pub record: Box<Account<'info, BusinessRecord>>,
+    #[account(address = market.usdc_mint @ FloatError::WrongMint)]
+    pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut, seeds = [USDC_VAULT_SEED, MARKET_VERSION], bump)]
+    pub usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(mut, seeds = [TOKEN_VAULT_SEED, collateral_mint.key().as_ref()], bump)]
+    pub token_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = liquidator_usdc.owner == liquidator.key() @ FloatError::WrongTokenOwner
+    )]
+    pub liquidator_usdc: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = liquidator_tokens.owner == liquidator.key() @ FloatError::WrongTokenOwner
+    )]
+    pub liquidator_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// The collateral's own program. Token-2022 for a mint with a transfer
+    /// fee, legacy SPL Token for one without.
+    pub token_program: Interface<'info, TokenInterface>,
+    /// USDC's program, which is not necessarily the collateral's. Settling a
+    /// liquidation moves two different assets, and one account cannot be two
+    /// programs at once.
+    pub usdc_token_program: Interface<'info, TokenInterface>,
+}
+
 #[derive(Accounts)]
 pub struct Repay<'info> {
     #[account(mut)]
@@ -804,7 +1370,7 @@ pub struct Repay<'info> {
     pub record: Box<Account<'info, BusinessRecord>>,
     #[account(
         mut,
-        seeds = [LOAN_SEED, borrower.key().as_ref()],
+        seeds = [LOAN_SEED, LOAN_VERSION, borrower.key().as_ref()],
         bump = loan.bump,
         constraint = loan.borrower == borrower.key() @ FloatError::LoanNotYours
     )]
@@ -839,7 +1405,7 @@ pub struct ReleasePool<'info> {
     )]
     pub pledge: Box<Account<'info, PledgedPool>>,
     #[account(
-        seeds = [LOAN_SEED, borrower.key().as_ref()],
+        seeds = [LOAN_SEED, LOAN_VERSION, borrower.key().as_ref()],
         bump = loan.bump
     )]
     pub loan: Box<Account<'info, Loan>>,
@@ -871,11 +1437,15 @@ pub struct Market {
     pub principal_outstanding: u64,
     pub bump: u8,
     pub pool_authority_bump: u8,
+    /// Who may post collateral prices.
+    pub price_publisher: Pubkey,
+    /// Coverage below which escrowed collateral may be seized.
+    pub liquidation_margin_bps: u16,
     /// Room to add fields without stranding the market PDA.
-    pub reserved: [u8; 64],
+    pub reserved: [u8; 30],
 }
 impl Market {
-    pub const LEN: usize = 8 + 32 * 4 + 8 + 4 + 8 + 8 + 1 + 1 + 64;
+    pub const LEN: usize = 8 + 32 * 4 + 8 + 4 + 8 + 8 + 1 + 1 + 32 + 2 + 30;
 }
 
 /// Identity. Only the verifier writes here, which is what keeps the credit
@@ -927,9 +1497,44 @@ impl PledgedPool {
     pub const LEN: usize = 8 + 32 * 3 + 1 + 8 + 8 + 1 + 1;
 }
 
+
+/// A relayed price for a collateral mint. USDC base units per whole token.
+/// Float's crank writes this; it is not an on-chain oracle and the README
+/// says so.
+#[account]
+pub struct PriceFeed {
+    pub mint: Pubkey,
+    pub price: u64,
+    pub updated_at: i64,
+    pub publisher: Pubkey,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+impl PriceFeed {
+    pub const LEN: usize = 8 + 32 + 8 + 8 + 32 + 1 + 32;
+}
+
+/// An escrowed token balance. `amount` is what the vault actually received,
+/// which is not what the borrower sent when the mint levies a transfer fee.
+#[account]
+pub struct TokenCollateral {
+    pub borrower: Pubkey,
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+impl TokenCollateral {
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 1 + 32;
+}
+
 #[account]
 pub struct Loan {
     pub borrower: Pubkey,
+    /// What backs this loan. A fee stream is collected; a token is seized.
+    pub collateral_kind: pricing::CollateralKind,
+    /// The pledged pool, or the collateral mint, depending on the kind.
+    pub collateral_ref: Pubkey,
     pub pool: Pubkey,
     pub principal: u64,
     pub fee: u64,
@@ -946,7 +1551,7 @@ pub struct Loan {
     pub bump: u8,
 }
 impl Loan {
-    pub const LEN: usize = 8 + 32 + 32 + 8 * 4 + 2 + 2 + 8 + 4 + 8 + 8 + 8 + 1 + 1;
+    pub const LEN: usize = 8 + 32 + 1 + 32 + 32 + 8 * 4 + 2 + 2 + 8 + 4 + 8 + 8 + 8 + 1 + 1 + 64;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -956,6 +1561,7 @@ pub enum LoanStatus {
     Active,
     Repaid,
     Defaulted,
+    Liquidated,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1037,6 +1643,46 @@ pub struct Repaid {
     pub next_margin_bps: u16,
 }
 
+
+#[event]
+pub struct PriceConfigSet {
+    pub publisher: Pubkey,
+    pub liquidation_margin_bps: u16,
+}
+
+#[event]
+pub struct PricePosted {
+    pub mint: Pubkey,
+    pub price: u64,
+    pub updated_at: i64,
+}
+
+#[event]
+pub struct TokenCollateralDeposited {
+    pub business: Pubkey,
+    pub mint: Pubkey,
+    pub requested: u64,
+    pub received: u64,
+    pub total: u64,
+}
+
+#[event]
+pub struct TokenCollateralWithdrawn {
+    pub business: Pubkey,
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub remaining: u64,
+}
+
+#[event]
+pub struct Liquidated {
+    pub business: Pubkey,
+    pub mint: Pubkey,
+    pub seized: u64,
+    pub settled: u64,
+    pub collateral_value: u64,
+}
+
 #[event]
 pub struct PoolReleased {
     pub business: Pubkey,
@@ -1109,6 +1755,18 @@ pub enum FloatError {
     WrongDbcProgram,
     #[msg("The market still has principal outstanding")]
     MarketHasOutstandingPrincipal,
+    #[msg("Liquidation margin must be above 100%")]
+    InvalidLiquidationMargin,
+    #[msg("Posted price must be greater than zero")]
+    InvalidPrice,
+    #[msg("The posted price is too stale to lend against")]
+    PriceTooStale,
+    #[msg("Collateral value does not cover this draw at the required margin")]
+    InsufficientCollateralValue,
+    #[msg("This loan is backed by a different kind of collateral")]
+    WrongCollateralKind,
+    #[msg("The position still covers its debt")]
+    PositionIsHealthy,
     #[msg("Arithmetic overflow")]
     MathOverflow,
 }
