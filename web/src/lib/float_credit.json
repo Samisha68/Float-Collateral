@@ -150,6 +150,12 @@
                 ]
               },
               {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
                 "kind": "account",
                 "path": "borrower"
               }
@@ -178,6 +184,250 @@
                   116,
                   121
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "term_days",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "borrow_against_tokens",
+      "docs": [
+        "Draw against escrowed tokens.",
+        "",
+        "Same two gates as the fee-stream rail: the approved limit, which the",
+        "record cannot move, and coverage, which the record improves. The only",
+        "difference is how the collateral is valued and that a token starts",
+        "from a higher margin."
+      ],
+      "discriminator": [
+        159,
+        53,
+        176,
+        171,
+        158,
+        139,
+        185,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "price_feed",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
               }
             ]
           }
@@ -381,6 +631,12 @@
                 ]
               },
               {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
                 "kind": "account",
                 "path": "pledge.borrower",
                 "account": "PledgedPool"
@@ -479,6 +735,172 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "deposit_token_collateral",
+      "docs": [
+        "Escrow tokens as collateral.",
+        "",
+        "Records what the vault actually received rather than what was asked",
+        "for. A Token-2022 mint may levy a transfer fee, in which case the",
+        "vault is credited less than the borrower sent, and lending against the",
+        "requested figure would leave the vault short by the difference on",
+        "every single deposit."
+      ],
+      "discriminator": [
+        166,
+        149,
+        10,
+        43,
+        93,
+        64,
+        84,
+        127
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower_tokens",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "init_market",
@@ -603,6 +1025,260 @@
           "type": "u32"
         }
       ]
+    },
+    {
+      "name": "liquidate_token_collateral",
+      "docs": [
+        "Seize escrowed collateral when it no longer covers the debt.",
+        "",
+        "This is the thing a fee stream cannot do. Anyone may call it: the",
+        "liquidator settles the loan in USDC and takes the tokens, and the",
+        "program checks the position is genuinely under water first, on a",
+        "price that is genuinely fresh."
+      ],
+      "discriminator": [
+        240,
+        184,
+        230,
+        43,
+        11,
+        78,
+        247,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "liquidator",
+          "docs": [
+            "Anyone may liquidate. The program checks the position, not the caller."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "price_feed",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.borrower",
+                "account": "TokenCollateral"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.borrower",
+                "account": "TokenCollateral"
+              }
+            ]
+          }
+        },
+        {
+          "name": "record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.borrower",
+                "account": "TokenCollateral"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "usdc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  100,
+                  99,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "liquidator_usdc",
+          "writable": true
+        },
+        {
+          "name": "liquidator_tokens",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "docs": [
+            "The collateral's own program. Token-2022 for a mint with a transfer",
+            "fee, legacy SPL Token for one without."
+          ]
+        },
+        {
+          "name": "usdc_token_program",
+          "docs": [
+            "USDC's program, which is not necessarily the collateral's. Settling a",
+            "liquidation moves two different assets, and one account cannot be two",
+            "programs at once."
+          ]
+        }
+      ],
+      "args": []
     },
     {
       "name": "pledge_pool",
@@ -754,6 +1430,90 @@
       "args": []
     },
     {
+      "name": "post_price",
+      "docs": [
+        "Publish a price for a collateral mint, in USDC base units per whole",
+        "token. Float's own crank signs this, and the README says so: it is a",
+        "relayed price, not an on-chain oracle."
+      ],
+      "discriminator": [
+        130,
+        245,
+        138,
+        141,
+        114,
+        50,
+        13,
+        48
+      ],
+      "accounts": [
+        {
+          "name": "publisher",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "price_feed",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "price",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "release_pool",
       "docs": [
         "Hand the pool's creator role back. Only once nothing is owed."
@@ -836,6 +1596,12 @@
                   111,
                   97,
                   110
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
                 ]
               },
               {
@@ -970,6 +1736,12 @@
                 ]
               },
               {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
                 "kind": "account",
                 "path": "borrower"
               }
@@ -1017,6 +1789,69 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "set_price_config",
+      "docs": [
+        "Point the token rail at a price publisher and set the level below which",
+        "escrowed collateral may be seized.",
+        "",
+        "Exists because Market gained these two fields out of its own reserve",
+        "rather than by changing size, so a market created before they existed",
+        "deserialises with them zeroed. Re-initialising would have meant",
+        "re-funding the vault and re-pledging live pools; this does not."
+      ],
+      "discriminator": [
+        175,
+        252,
+        164,
+        143,
+        209,
+        133,
+        185,
+        181
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "publisher",
+          "type": "pubkey"
+        },
+        {
+          "name": "liquidation_margin_bps",
+          "type": "u16"
+        }
+      ]
     },
     {
       "name": "set_verifier",
@@ -1194,6 +2029,160 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "withdraw_token_collateral",
+      "docs": [
+        "Take escrowed tokens back. Only when nothing is owed."
+      ],
+      "discriminator": [
+        102,
+        136,
+        166,
+        215,
+        176,
+        213,
+        201,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "borrower",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loan",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  2
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower_tokens",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -1261,6 +2250,32 @@
         214,
         167
       ]
+    },
+    {
+      "name": "PriceFeed",
+      "discriminator": [
+        189,
+        103,
+        252,
+        23,
+        152,
+        35,
+        243,
+        156
+      ]
+    },
+    {
+      "name": "TokenCollateral",
+      "discriminator": [
+        69,
+        16,
+        34,
+        23,
+        34,
+        209,
+        62,
+        70
+      ]
     }
   ],
   "events": [
@@ -1301,6 +2316,19 @@
         178,
         254,
         8
+      ]
+    },
+    {
+      "name": "Liquidated",
+      "discriminator": [
+        231,
+        57,
+        55,
+        75,
+        0,
+        170,
+        246,
+        68
       ]
     },
     {
@@ -1356,6 +2384,32 @@
       ]
     },
     {
+      "name": "PriceConfigSet",
+      "discriminator": [
+        49,
+        110,
+        148,
+        22,
+        85,
+        53,
+        166,
+        126
+      ]
+    },
+    {
+      "name": "PricePosted",
+      "discriminator": [
+        166,
+        13,
+        249,
+        195,
+        250,
+        145,
+        213,
+        229
+      ]
+    },
+    {
       "name": "Repaid",
       "discriminator": [
         38,
@@ -1366,6 +2420,32 @@
         164,
         172,
         23
+      ]
+    },
+    {
+      "name": "TokenCollateralDeposited",
+      "discriminator": [
+        202,
+        250,
+        98,
+        43,
+        17,
+        82,
+        55,
+        187
+      ]
+    },
+    {
+      "name": "TokenCollateralWithdrawn",
+      "discriminator": [
+        164,
+        172,
+        94,
+        149,
+        207,
+        53,
+        203,
+        223
       ]
     },
     {
@@ -1506,6 +2586,32 @@
       }
     },
     {
+      "name": "CollateralKind",
+      "docs": [
+        "Collateral quality sets the margin; the record improves it.",
+        "",
+        "A fee stream cannot be seized. Float collects it at source, and if the",
+        "pool's volume dies there is nothing to sell, so the borrower's record is",
+        "doing the underwriting. An escrowed token is the opposite: it can be taken",
+        "and sold, but its price moves while Float holds it, so it carries a",
+        "haircut on top of the ladder to absorb that move.",
+        "",
+        "The ladder is the same either way. Only the starting point differs, which",
+        "is the point: repaying improves the price of credit whatever backs it."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "FeeStream"
+          },
+          {
+            "name": "Token"
+          }
+        ]
+      }
+    },
+    {
       "name": "Drawn",
       "type": {
         "kind": "struct",
@@ -1590,12 +2696,58 @@
       }
     },
     {
+      "name": "Liquidated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "seized",
+            "type": "u64"
+          },
+          {
+            "name": "settled",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_value",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Loan",
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_kind",
+            "docs": [
+              "What backs this loan. A fee stream is collected; a token is seized."
+            ],
+            "type": {
+              "defined": {
+                "name": "CollateralKind"
+              }
+            }
+          },
+          {
+            "name": "collateral_ref",
+            "docs": [
+              "The pledged pool, or the collateral mint, depending on the kind."
+            ],
             "type": "pubkey"
           },
           {
@@ -1677,6 +2829,9 @@
           },
           {
             "name": "Defaulted"
+          },
+          {
+            "name": "Liquidated"
           }
         ]
       }
@@ -1727,6 +2882,20 @@
             "type": "u8"
           },
           {
+            "name": "price_publisher",
+            "docs": [
+              "Who may post collateral prices."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "liquidation_margin_bps",
+            "docs": [
+              "Coverage below which escrowed collateral may be seized."
+            ],
+            "type": "u16"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Room to add fields without stranding the market PDA."
@@ -1734,7 +2903,7 @@
             "type": {
               "array": [
                 "u8",
-                64
+                30
               ]
             }
           }
@@ -1865,6 +3034,84 @@
       }
     },
     {
+      "name": "PriceConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "liquidation_margin_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PriceFeed",
+      "docs": [
+        "A relayed price for a collateral mint. USDC base units per whole token.",
+        "Float's crank writes this; it is not an on-chain oracle and the README",
+        "says so."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          },
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PricePosted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Repaid",
       "type": {
         "kind": "struct",
@@ -1908,6 +3155,95 @@
           {
             "name": "next_margin_bps",
             "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenCollateral",
+      "docs": [
+        "An escrowed token balance. `amount` is what the vault actually received,",
+        "which is not what the borrower sent when the mint levies a transfer fee."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenCollateralDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "requested",
+            "type": "u64"
+          },
+          {
+            "name": "received",
+            "type": "u64"
+          },
+          {
+            "name": "total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenCollateralWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "remaining",
+            "type": "u64"
           }
         ]
       }

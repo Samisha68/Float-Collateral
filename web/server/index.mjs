@@ -20,7 +20,13 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import {
+  TOKEN_2022_PROGRAM_ID, ExtensionType, getMintLen,
+  createInitializeMintInstruction, createInitializeTransferFeeConfigInstruction,
+  createAssociatedTokenAccountIdempotentInstruction,
+  getAssociatedTokenAddressSync, mintTo,
+} from "@solana/spl-token";
 import anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 
@@ -28,11 +34,20 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3001);
 const RPC = process.env.RPC_URL || "https://api.devnet.solana.com";
 const STORE = path.join(HERE, "applications.json");
+const DEMO_STORE = path.join(HERE, "demo-collateral.json");
 
 /* Every approved business gets the same limit. Sizing an individual limit is a
    credit decision, and inventing one here would be dressing a constant up as
    underwriting. Reputation changes the price, never this number. */
 const CREDIT_LIMIT = new BN(10_000_000_000); // $10,000
+
+/* The demo collateral token, modelled on T-OpenAI: Token-2022, 9 decimals,
+   a 20bps transfer fee. The fee is the point — it is what makes the vault
+   receive less than the borrower sent. */
+const DEMO_DECIMALS = 9;
+const DEMO_FEE_BPS = 20;
+const DEMO_PRICE = 40_000_000;          // $40.00 a token
+const DEMO_GRANT = 500_000_000_000n;    // 500 tokens, nominally $20,000
 
 const JURISDICTIONS = ["United States", "United Kingdom", "India", "Singapore", "Germany", "Other"];
 const COMPANY_TYPES = ["Private limited", "LLC", "Corporation", "Partnership", "Sole trader"];
@@ -197,6 +212,109 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       const msg = e?.error?.errorMessage || e?.message || String(e);
       return json(res, 502, { errors: [`Verification failed on chain: ${msg}`] });
+    }
+  }
+
+  /* ── The demo collateral token ─────────────────────────────────────────
+
+     A judge who never launched a token on Meteora has nothing to pledge, and
+     a product that dead-ends its evaluator is not a product. So Float hands
+     out a test collateral token: Token-2022, 9 decimals, a 20bps transfer
+     fee, modelled on T-OpenAI. Float posts its price too, because a token
+     nobody has valued cannot secure anything.
+
+     This exists only because the market and the price publisher are both
+     Float's own key on devnet. It is a demo faucet, it says so on the screen
+     it appears on, and there is no version of it that belongs on mainnet. */
+
+  if (req.method === "POST" && url.pathname === "/api/demo-collateral") {
+    let raw = "";
+    for await (const chunk of req) {
+      raw += chunk;
+      if (raw.length > 4_000) { req.destroy(); return; }
+    }
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return json(res, 400, { errors: ["Malformed request."] });
+    }
+
+    let recipient;
+    try {
+      recipient = new PublicKey(String(body.wallet || "").trim());
+    } catch {
+      return json(res, 400, { errors: ["That is not a valid wallet address."] });
+    }
+
+    try {
+      const store = fs.existsSync(DEMO_STORE)
+        ? JSON.parse(fs.readFileSync(DEMO_STORE, "utf8"))
+        : {};
+
+      /* One mint for the whole demo. Every judge holds the same token, which
+         means one posted price covers all of them and the price stays fresh
+         for everybody rather than going stale per wallet. */
+      let mint = store.mint ? new PublicKey(store.mint) : null;
+      if (!mint) {
+        const kp = Keypair.generate();
+        const len = getMintLen([ExtensionType.TransferFeeConfig]);
+        const rent = await connection.getMinimumBalanceForRentExemption(len);
+        const tx = new Transaction().add(
+          SystemProgram.createAccount({
+            fromPubkey: verifier.publicKey, newAccountPubkey: kp.publicKey,
+            space: len, lamports: rent, programId: TOKEN_2022_PROGRAM_ID,
+          }),
+          createInitializeTransferFeeConfigInstruction(
+            kp.publicKey, verifier.publicKey, verifier.publicKey,
+            DEMO_FEE_BPS, BigInt("18446744073709551615"), TOKEN_2022_PROGRAM_ID,
+          ),
+          createInitializeMintInstruction(
+            kp.publicKey, DEMO_DECIMALS, verifier.publicKey, null, TOKEN_2022_PROGRAM_ID,
+          ),
+        );
+        await provider.sendAndConfirm(tx, [kp]);
+        mint = kp.publicKey;
+        store.mint = mint.toBase58();
+        fs.writeFileSync(DEMO_STORE, JSON.stringify(store, null, 2) + "\n");
+      }
+
+      /* The price feed goes stale in five minutes, so it is refreshed on
+         every request rather than only when the mint is created. */
+      await program.methods
+        .postPrice(new BN(DEMO_PRICE))
+        .accounts({
+          publisher: verifier.publicKey,
+          market: marketPda,
+          collateralMint: mint,
+          priceFeed: pda(Buffer.from("price"), mint.toBuffer()),
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const ata = getAssociatedTokenAddressSync(mint, recipient, false, TOKEN_2022_PROGRAM_ID);
+      await provider.sendAndConfirm(
+        new Transaction().add(createAssociatedTokenAccountIdempotentInstruction(
+          verifier.publicKey, ata, recipient, mint, TOKEN_2022_PROGRAM_ID,
+        )),
+        [],
+      );
+      const sig = await mintTo(
+        connection, verifier, mint, ata, verifier, DEMO_GRANT, [], undefined, TOKEN_2022_PROGRAM_ID,
+      );
+
+      return json(res, 200, {
+        ok: true,
+        mint: mint.toBase58(),
+        decimals: DEMO_DECIMALS,
+        transferFeeBps: DEMO_FEE_BPS,
+        amount: DEMO_GRANT.toString(),
+        price: String(DEMO_PRICE),
+        signature: sig,
+      });
+    } catch (e) {
+      const msg = e?.error?.errorMessage || e?.message || String(e);
+      return json(res, 502, { errors: [`Could not issue the demo token: ${msg}`] });
     }
   }
 

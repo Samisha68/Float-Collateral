@@ -24,19 +24,29 @@ import { SectionHeading } from "@/components/AppShell";
 import { ConnectButton } from "@/wallet";
 import { cn } from "@/lib/utils";
 import { usd, pct, annualised, duration, plural } from "@/lib/format";
-import { marginBps, rateBps, feeAmount, coverageRequired, nextStep, tierName } from "@/lib/pricing";
+import {
+  marginBpsFor, rateBps, feeAmount, coverageRequired, nextStep, tierName,
+  tokenValueUsdc, collateralCeiling, type CollateralKind,
+} from "@/lib/pricing";
 import { projectFees } from "@/lib/chain";
 import * as act from "@/lib/actions";
 import type { Position, Stage } from "@/lib/useConnected";
 import Apply from "./steps/Apply";
 import Pledge from "./steps/Pledge";
+import Choose from "./steps/Choose";
+import Escrow from "./steps/Escrow";
 
 const TERMS = [7, 14, 30, 45, 60];
+
+/** A raw token amount at its mint's decimals. Money uses `usd`; this is for
+    the collateral itself, which is not money. */
+const amountOf = (raw: bigint, decimals: number) =>
+  (Number(raw) / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 const STEPS: { stage: Stage; label: string; icon: typeof Wallet }[] = [
   { stage: "disconnected", label: "Connect", icon: Wallet },
   { stage: "unverified", label: "Get verified", icon: ShieldCheck },
-  { stage: "unpledged", label: "Pledge", icon: Link2 },
+  { stage: "unsecured", label: "Secure it", icon: Link2 },
   { stage: "ready", label: "Draw", icon: ArrowDownToLine },
   { stage: "drawn", label: "Repay", icon: RotateCcw },
 ];
@@ -83,13 +93,14 @@ export default function Journey({
     return (
       <div className="space-y-8">
         <div className="space-y-5">
-          <h2 className="max-w-[17ch] text-display font-semibold leading-[1.12] tracking-[-0.03em]">
-            Turn the fees your token already earns into working capital.
+          <h2 className="max-w-[19ch] text-display font-semibold leading-[1.12] tracking-[-0.03em]">
+            Working capital against what your business already holds.
           </h2>
-          <p className="max-w-[54ch] text-lead leading-relaxed text-muted-foreground">
-            If you launched a token on Meteora, your pool pays you a share of every trade. Float
-            lends USDC against that stream and takes the claim on it as security, so the fees
-            repay the loan at source. Repay, and your next loan costs less.
+          <p className="max-w-[56ch] text-lead leading-relaxed text-muted-foreground">
+            Float lends USDC to verified businesses against one of two things: the trading fees
+            your Meteora pool already earns, or tokens you hold and escrow. Your approved credit
+            is fixed either way. What you put up decides the price — and every advance you repay
+            makes the next one cheaper.
           </p>
           <div className="flex items-center gap-3 pt-1">
             <ConnectButton size="lg" />
@@ -103,9 +114,9 @@ export default function Journey({
 
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { icon: ShieldCheck, t: "Get verified", d: "A short business check sets your approved credit limit." },
-            { icon: Link2, t: "Pledge your pool", d: "Hand Float the creator role. Meteora enforces it, not us." },
-            { icon: ArrowDownToLine, t: "Draw and repay", d: "Fees pay the loan down. Every repayment improves your terms." },
+            { icon: ShieldCheck, t: "Get verified", d: "A short business check sets your approved credit limit. It does not change after that." },
+            { icon: Link2, t: "Choose your security", d: "A Meteora fee stream at 150%, or tokens in escrow at 200%. Different risks, different prices." },
+            { icon: ArrowDownToLine, t: "Draw and repay", d: "Draw up to what your collateral supports. Six repayments take 30 points off what you post." },
           ].map(({ icon: Icon, t, d }) => (
             <Card key={t} className="shadow-none">
               <CardContent className="space-y-2">
@@ -134,7 +145,14 @@ export default function Journey({
     <div className="space-y-8">
       <Progress stage={position.stage} />
       {position.stage === "unverified" && <Apply wallet={publicKey} onDone={refresh} />}
-      {position.stage === "unpledged" && <Pledge wallet={publicKey} send={send} onDone={refresh} />}
+      {position.stage === "unsecured" && (
+        <Secure
+          wallet={publicKey}
+          repayments={position.record.advancesRepaid}
+          send={send}
+          onDone={refresh}
+        />
+      )}
       {(position.stage === "ready" || position.stage === "drawn") && (
         <Active position={position} send={send} onDone={refresh} />
       )}
@@ -142,7 +160,45 @@ export default function Journey({
   );
 }
 
-/* ── Verified, pledged, transacting ──────────────────────────────────────── */
+/* ── Choosing what secures the loan ──────────────────────────────────────────
+
+   A local choice, deliberately. Everything else on this screen is derived
+   from the chain, but which rail you are *considering* is not a fact about
+   your account until you have actually posted something — so it lives here
+   and disappears the moment the chain has an answer. */
+
+function Secure({
+  wallet, repayments, send, onDone,
+}: {
+  wallet: PublicKey;
+  repayments: number;
+  send: act.SendFn;
+  onDone: () => void;
+}) {
+  const [rail, setRail] = useState<CollateralKind | null>(null);
+
+  if (!rail) return <Choose repayments={repayments} onPick={setRail} />;
+  if (rail === "token")
+    return (
+      <Escrow
+        wallet={wallet}
+        repayments={repayments}
+        send={send}
+        onDone={onDone}
+        onBack={() => setRail("feeStream")}
+      />
+    );
+  return (
+    <div className="space-y-4">
+      <Pledge wallet={wallet} send={send} onDone={onDone} />
+      <Button variant="ghost" className="px-0" onClick={() => setRail("token")}>
+        Escrow tokens instead
+      </Button>
+    </div>
+  );
+}
+
+/* ── Verified, secured, transacting ──────────────────────────────────────── */
 
 function Active({
   position, send, onDone,
@@ -159,7 +215,16 @@ function Active({
   const n = position.record.advancesRepaid;
   const limit = position.verification?.creditLimit ?? 0n;
   const loan = position.loan;
-  const step = nextStep(n);
+  const rail: CollateralKind = position.rail ?? "feeStream";
+  const step = nextStep(n, rail);
+  const token = position.token;
+
+  /* What the escrow is worth right now. Zero on the fee-stream rail, where
+     capacity is a projection rather than a valuation. */
+  const collateralValue =
+    rail === "token" && token?.price
+      ? tokenValueUsdc(token.position.amount, token.price.price, token.decimals)
+      : 0n;
 
   const run = async (label: string, fn: () => Promise<string>) => {
     setBusy(label); setError(null); setDone(null);
@@ -183,7 +248,7 @@ function Active({
               ["Successful repayments", n],
               ["Overdue", position.record.advancesOverdue],
               ["Total repaid", usd(position.record.totalVolumeRepaid)],
-              ["Collateral requirement", pct(marginBps(n), 0)],
+              ["Collateral requirement", pct(marginBpsFor(rail, n), 0)],
               [
                 "Next tier",
                 step
@@ -195,18 +260,39 @@ function Active({
         </CardContent>
       </Card>
 
-      <SectionHeading>What secures this</SectionHeading>
+      <SectionHeading
+        hint={<StatusWord>{rail === "token" ? "Escrowed tokens" : "Fee stream"}</StatusWord>}
+      >
+        What secures this
+      </SectionHeading>
       <Card className="shadow-none">
         <CardContent>
-          <Rows
-            items={[
-              ["Pledged pool", position.poolAddress ? <KeyLink value={position.poolAddress} /> : "—"],
-              ["Creator role held by", position.pool ? <KeyLink value={position.pool.creator} /> : "—"],
-              ["Your share of trading fees", position.pledge ? `${position.pledge.creatorFeePct}%` : "—"],
-              ["Observed by Float for", duration(position.observedSecs)],
-              ["Earned under observation", usd(position.observedCreatorFees)],
-            ]}
-          />
+          {rail === "token" && token ? (
+            <Rows
+              items={[
+                ["Token", <KeyLink value={token.position.mint} />],
+                ["Held in escrow", amountOf(token.position.amount, token.decimals)],
+                ["Float's posted price", token.price ? usd(token.price.price) : "not posted"],
+                ["Value of the escrow", usd(collateralValue)],
+                [
+                  "Price last posted",
+                  token.price
+                    ? `${duration(Math.max(0, Math.floor(Date.now() / 1000) - token.price.updatedAt))} ago`
+                    : "—",
+                ],
+              ]}
+            />
+          ) : (
+            <Rows
+              items={[
+                ["Pledged pool", position.poolAddress ? <KeyLink value={position.poolAddress} /> : "—"],
+                ["Creator role held by", position.pool ? <KeyLink value={position.pool.creator} /> : "—"],
+                ["Your share of trading fees", position.pledge ? `${position.pledge.creatorFeePct}%` : "—"],
+                ["Observed by Float for", duration(position.observedSecs)],
+                ["Earned under observation", usd(position.observedCreatorFees)],
+              ]}
+            />
+          )}
         </CardContent>
       </Card>
     </>
@@ -222,27 +308,35 @@ function Active({
           <CardContent className="space-y-6">
             <Headline
               value={usd(outstanding)}
-              label={`left to repay, after ${usd(loan.collected)} collected from your pool`}
+              label={
+                rail === "token"
+                  ? "left to repay"
+                  : `left to repay, after ${usd(loan.collected)} collected from your pool`
+              }
             />
             <Rows
               items={[
                 ["Drawn", usd(loan.principal)],
                 ["Fee", usd(loan.fee)],
                 ["Total due", usd(loan.totalDue)],
-                ["Collected from fees so far", usd(loan.collected)],
+                ...(rail === "token"
+                  ? ([["Held in escrow", usd(collateralValue)]] as [React.ReactNode, React.ReactNode][])
+                  : ([["Collected from fees so far", usd(loan.collected)]] as [React.ReactNode, React.ReactNode][])),
                 ["Due", new Date(loan.dueAt * 1000).toLocaleDateString()],
                 ["Your USDC balance", usd(balance)],
               ]}
             />
             <div className="flex flex-wrap gap-2.5">
-              <Button
-                variant="outline"
-                disabled={!!busy}
-                onClick={() => run("collect", () => act.collectFees(position.wallet, new PublicKey(position.poolAddress!), send))}
-              >
-                {busy === "collect" ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" strokeWidth={1.75} />}
-                Collect fees from pool
-              </Button>
+              {rail !== "token" && (
+                <Button
+                  variant="outline"
+                  disabled={!!busy}
+                  onClick={() => run("collect", () => act.collectFees(position.wallet, new PublicKey(position.poolAddress!), send))}
+                >
+                  {busy === "collect" ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" strokeWidth={1.75} />}
+                  Collect fees from pool
+                </Button>
+              )}
               <Button
                 disabled={!!busy || short}
                 onClick={() => run("repay", () => act.repay(position.wallet, send))}
@@ -253,8 +347,10 @@ function Active({
             </div>
             {short && (
               <Note icon={CircleAlert}>
-                You hold {usd(balance)} and need {usd(outstanding)}. Collect the pool's fees
-                first, or top up your wallet.
+                You hold {usd(balance)} and need {usd(outstanding)}.{" "}
+                {rail === "token"
+                  ? "Top up your wallet to repay and release your collateral."
+                  : "Collect the pool's fees first, or top up your wallet."}
               </Note>
             )}
             <Outcome error={error} done={done} />
@@ -269,7 +365,7 @@ function Active({
   const parsed = Math.max(0, Number(amountStr.replace(/[^0-9.]/g, "")) || 0);
   const draw = BigInt(Math.round(parsed * 1e6));
   const fee = draw > 0n ? feeAmount(draw, term, n) : 0n;
-  const coverage = draw > 0n ? coverageRequired(draw, n) : 0n;
+  const coverage = draw > 0n ? coverageRequired(draw, n, rail) : 0n;
   const projected =
     position.pool && position.pledge && position.observedSecs > 0
       ? projectFees({
@@ -284,8 +380,22 @@ function Active({
         })
       : 0n;
 
+  /* The two ceilings, and the one that actually binds.
+
+     This is the answer to the obvious question: can I borrow whatever I ask
+     for? No. Your approved limit is what Float is willing to lend you; your
+     collateral is what it can support. You get the lower of the two, and a
+     borrower should be able to see which one is holding them back without
+     submitting a transaction to find out. */
+  const capacity =
+    rail === "token"
+      ? collateralCeiling(collateralValue, "token", n)
+      : collateralCeiling(projected, "feeStream", n);
+  const ceiling = capacity < limit ? capacity : limit;
+  const boundBy = capacity < limit ? "collateral" : "limit";
+
   const overLimit = draw > limit;
-  const underCovered = coverage > projected;
+  const underCovered = coverage > (rail === "token" ? collateralValue : projected);
   const ok = draw > 0n && !overLimit && !underCovered;
 
   return (
@@ -293,9 +403,41 @@ function Active({
       <Card className="shadow-none">
         <CardContent className="space-y-6">
           <Headline
-            value={usd(limit)}
-            label="approved credit"
-            sub={`${pct(marginBps(n), 0)} collateral · ${pct(rateBps(term, n))} for ${term} days`}
+            value={usd(ceiling)}
+            label={
+              boundBy === "collateral"
+                ? "the most your collateral can support"
+                : "your approved credit"
+            }
+            sub={`${pct(marginBpsFor(rail, n), 0)} collateral · ${pct(rateBps(term, n))} for ${term} days`}
+          />
+
+          <Rows
+            items={[
+              ["Approved credit", usd(limit)],
+              [
+                rail === "token" ? "Escrow value" : "Fees projected over the term",
+                usd(rail === "token" ? collateralValue : projected),
+              ],
+              [
+                "Which your collateral can carry",
+                <>
+                  {usd(capacity)}
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    at {pct(marginBpsFor(rail, n), 0)}
+                  </span>
+                </>,
+              ],
+              [
+                "So you can draw up to",
+                <>
+                  {usd(ceiling)}
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    {boundBy === "collateral" ? "capped by your collateral" : "capped by your limit"}
+                  </span>
+                </>,
+              ],
+            ]}
           />
 
           <div className="grid gap-4 sm:grid-cols-[1fr_11rem]">
@@ -330,8 +472,11 @@ function Active({
             items={[
               ["Fee", <>{usd(fee)}<span className="ml-1.5 font-normal text-muted-foreground">{pct(rateBps(term, n))} · {annualised(rateBps(term, n), term)}</span></>],
               ["Total to repay", usd(draw + fee)],
-              ["Coverage required", usd(coverage)],
-              ["Fees projected over the term", usd(projected)],
+              ["Coverage this draw needs", usd(coverage)],
+              [
+                rail === "token" ? "Coverage you have escrowed" : "Coverage your fees project",
+                usd(rail === "token" ? collateralValue : projected),
+              ],
             ]}
           />
 
@@ -339,7 +484,17 @@ function Active({
             <Button
               size="lg"
               disabled={!ok || !!busy}
-              onClick={() => run("borrow", () => act.borrow(position.wallet, new PublicKey(position.poolAddress!), draw, term, send))}
+              onClick={() =>
+                run("borrow", () =>
+                  rail === "token"
+                    ? act.borrowAgainstTokens(
+                        position.wallet, new PublicKey(token!.position.mint), draw, term, send,
+                      )
+                    : act.borrow(
+                        position.wallet, new PublicKey(position.poolAddress!), draw, term, send,
+                      ),
+                )
+              }
             >
               {busy === "borrow" ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" strokeWidth={1.75} />}
               Draw {usd(draw)}
@@ -350,7 +505,9 @@ function Active({
             <Note icon={CircleAlert}>
               {overLimit
                 ? `That is over your approved limit of ${usd(limit)}.`
-                : `Your pool's projected fees of ${usd(projected)} do not cover ${usd(coverage)} at ${pct(marginBps(n), 0)}. Give it more trading, or draw less.`}
+                : rail === "token"
+                ? `Your escrow is worth ${usd(collateralValue)} and this draw needs ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Escrow more, or draw up to ${usd(ceiling)}.`
+                : `Your pool's projected fees of ${usd(projected)} do not cover ${usd(coverage)} at ${pct(marginBpsFor(rail, n), 0)}. Give it more trading, or draw up to ${usd(ceiling)}.`}
             </Note>
           )}
           <Outcome error={error} done={done} />

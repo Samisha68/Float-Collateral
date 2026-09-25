@@ -15,11 +15,15 @@ import {
   Transaction,
   type Connection,
 } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction, getMint,
+} from "@solana/spl-token";
 import BN from "bn.js";
 import {
   program, connection, config, marketPda, vaultPda, poolAuthorityPda,
   verificationPda, recordPda, pledgePda, loanPda, getPool,
+  priceFeedPda, tokenVaultPda, tokenCollateralPda,
 } from "./chain";
 
 const DBC_PROGRAM_ID = new PublicKey("dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN");
@@ -249,4 +253,146 @@ export async function usdcBalance(owner: PublicKey): Promise<bigint> {
   } catch {
     return 0n;
   }
+}
+
+
+/* ── The token rail ──────────────────────────────────────────────────────────
+
+   The other kind of collateral. A business that never launched a token still
+   holds assets, and Float escrows those instead: it values them at a posted
+   price and seizes them if the price stops covering the loan.
+
+   The mint's own program matters here. A Token-2022 mint with a transfer fee
+   is the case Float was built for, and its program is not USDC's, so every
+   call has to ask which one it is rather than assume. Getting this wrong is
+   not a type error; it is a transaction that fails after the wallet has
+   already asked someone to sign. */
+
+/** Which token program owns this mint, and how many decimals it has. */
+export async function readCollateralMint(mint: PublicKey) {
+  const info = await connection.getAccountInfo(mint, "confirmed");
+  if (!info) throw new Error("No mint exists at that address on devnet.");
+  const owner = info.owner.equals(TOKEN_2022_PROGRAM_ID)
+    ? TOKEN_2022_PROGRAM_ID
+    : TOKEN_PROGRAM_ID;
+  if (!info.owner.equals(TOKEN_2022_PROGRAM_ID) && !info.owner.equals(TOKEN_PROGRAM_ID))
+    throw new Error("That address is not an SPL token mint.");
+  const parsed = await getMint(connection, mint, "confirmed", owner);
+  return { tokenProgram: owner, decimals: parsed.decimals, supply: parsed.supply };
+}
+
+export type MintCheck =
+  | { ok: true; mint: PublicKey; decimals: number; tokenProgram: PublicKey; balance: bigint; price: bigint | null }
+  | { ok: false; reason: string };
+
+/** Everything the deposit will check, checked first. A price has to exist
+    before collateral is worth anything, so this reports its absence plainly
+    rather than letting the draw fail later. */
+export async function checkCollateralMint(address: string, owner: PublicKey): Promise<MintCheck> {
+  let mint: PublicKey;
+  try {
+    mint = new PublicKey(address.trim());
+  } catch {
+    return { ok: false, reason: "That is not a valid mint address." };
+  }
+
+  let info;
+  try {
+    info = await readCollateralMint(mint);
+  } catch (e: any) {
+    return { ok: false, reason: e?.message ?? "Could not read that mint." };
+  }
+
+  const ata = await getAssociatedTokenAddress(mint, owner, false, info.tokenProgram);
+  let balance = 0n;
+  try {
+    const bal = await connection.getTokenAccountBalance(ata, "confirmed");
+    balance = BigInt(bal.value.amount);
+  } catch {
+    return { ok: false, reason: "Your wallet holds none of this token." };
+  }
+  if (balance === 0n) return { ok: false, reason: "Your wallet holds none of this token." };
+
+  const feed = await connection.getAccountInfo(priceFeedPda(mint), "confirmed");
+  let price: bigint | null = null;
+  if (feed) {
+    try {
+      const decoded: any = program.coder.accounts.decode("priceFeed", feed.data as Buffer);
+      price = BigInt(decoded.price.toString());
+    } catch { /* an unreadable feed is the same as no feed */ }
+  }
+  if (price === null)
+    return { ok: false, reason: "Float has not posted a price for this token, so it cannot be valued." };
+
+  return { ok: true, mint, decimals: info.decimals, tokenProgram: info.tokenProgram, balance, price };
+}
+
+export async function depositTokenCollateral(
+  owner: PublicKey, mint: PublicKey, tokenProgram: PublicKey, amount: bigint, send: SendFn,
+) {
+  const borrowerTokens = await getAssociatedTokenAddress(mint, owner, false, tokenProgram);
+  const ix = await program.methods
+    .depositTokenCollateral(new BN(amount.toString()))
+    .accounts({
+      borrower: owner,
+      market: marketPda(),
+      verification: verificationPda(owner),
+      collateralMint: mint,
+      position: tokenCollateralPda(owner, mint),
+      tokenVault: tokenVaultPda(mint),
+      borrowerTokens,
+      tokenProgram,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  return confirm(await send(new Transaction().add(ix), connection));
+}
+
+export async function borrowAgainstTokens(
+  owner: PublicKey, mint: PublicKey, amount: bigint, termDays: number, send: SendFn,
+) {
+  const tx = new Transaction();
+  const borrowerUsdc = await ensureUsdcAccount(owner, tx);
+  const ix = await program.methods
+    .borrowAgainstTokens(new BN(amount.toString()), termDays)
+    .accounts({
+      borrower: owner,
+      market: marketPda(),
+      verification: verificationPda(owner),
+      record: recordPda(owner),
+      collateralMint: mint,
+      priceFeed: priceFeedPda(mint),
+      position: tokenCollateralPda(owner, mint),
+      loan: loanPda(owner),
+      usdcMint: USDC_MINT,
+      usdcVault: vaultPda(),
+      borrowerUsdc,
+      // This instruction moves USDC and nothing else, so this is USDC's
+      // program, not the collateral's.
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  tx.add(ix);
+  return confirm(await send(tx, connection));
+}
+
+export async function withdrawTokenCollateral(
+  owner: PublicKey, mint: PublicKey, tokenProgram: PublicKey, amount: bigint, send: SendFn,
+) {
+  const borrowerTokens = await getAssociatedTokenAddress(mint, owner, false, tokenProgram);
+  const ix = await program.methods
+    .withdrawTokenCollateral(new BN(amount.toString()))
+    .accounts({
+      borrower: owner,
+      market: marketPda(),
+      collateralMint: mint,
+      position: tokenCollateralPda(owner, mint),
+      loan: loanPda(owner),
+      tokenVault: tokenVaultPda(mint),
+      borrowerTokens,
+      tokenProgram,
+    })
+    .instruction();
+  return confirm(await send(new Transaction().add(ix), connection));
 }
