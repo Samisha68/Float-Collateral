@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-adapter-react";
 import { WalletModalProvider, useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
-  Wallet as WalletIcon, LogOut, Copy, Check, ExternalLink, RefreshCw, ChevronDown, User,
+  Wallet as WalletIcon, LogOut, Copy, Check, ExternalLink, RefreshCw, ChevronDown, User, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { explorer } from "@/lib/format";
+import { usePrivySession } from "@/privy";
 /* The adapter's own stylesheet is deliberately NOT imported. It is a dark
    theme carrying a purple accent and a Google Fonts download, and forcing it
    light left the modal title white on white. Float styles the modal itself,
@@ -107,8 +108,18 @@ export function WalletChip() {
 function WalletMenu({ onProfile }: { onProfile?: () => void }) {
   const { publicKey, disconnect, wallet } = useWallet();
   const { setVisible } = useWalletModal();
+  const session = usePrivySession();
   const address = publicKey!.toBase58();
   const { copy, state } = useCopy(address);
+
+  /* Signing out has to end both sessions. Disconnecting the adapter while
+     Privy still holds the login leaves a user who pressed "disconnect" still
+     logged in, and the wallet silently reappears on the next render. */
+  const signOut = async () => {
+    try { await disconnect(); } finally {
+      if (session.enabled && session.authenticated) await session.logout();
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -134,6 +145,12 @@ function WalletMenu({ onProfile }: { onProfile?: () => void }) {
               {wallet?.adapter.name ?? "Connected"} · devnet
             </span>
           </div>
+          {session.authenticated && session.email && (
+            <div className="flex items-center gap-1.5 text-caption text-muted-foreground">
+              <Mail className="size-3" strokeWidth={1.75} />
+              {session.email}
+            </div>
+          )}
           <div className="font-mono text-caption leading-relaxed break-all text-foreground">
             {address}
           </div>
@@ -167,9 +184,9 @@ function WalletMenu({ onProfile }: { onProfile?: () => void }) {
           Switch wallet
         </DropdownMenuItem>
 
-        <DropdownMenuItem onSelect={() => disconnect()}>
+        <DropdownMenuItem onSelect={() => { void signOut(); }}>
           <LogOut strokeWidth={1.75} />
-          Disconnect
+          {session.authenticated ? "Sign out" : "Disconnect"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -181,10 +198,12 @@ export function ConnectButton({
 }: { size?: "sm" | "lg"; onProfile?: () => void }) {
   const { publicKey, connecting } = useWallet();
   const { setVisible } = useWalletModal();
+  const session = usePrivySession();
+  const big = size === "lg";
 
   if (connecting)
     return (
-      <Button size={size === "lg" ? "lg" : "sm"} className="min-h-11" disabled>
+      <Button size={big ? "lg" : "sm"} className="min-h-11" disabled>
         <WalletIcon className="size-4 animate-pulse" strokeWidth={1.75} />
         Connecting…
       </Button>
@@ -192,10 +211,45 @@ export function ConnectButton({
 
   if (publicKey) return <WalletMenu onProfile={onProfile} />;
 
+  /* Signed in, but the embedded wallet has not finished being provisioned or
+     registered yet. Saying so beats showing "sign in" to someone who just
+     did. */
+  if (session.enabled && session.authenticated)
+    return (
+      <Button size={big ? "lg" : "sm"} className="min-h-11" disabled>
+        <WalletIcon className="size-4 animate-pulse" strokeWidth={1.75} />
+        Preparing your wallet…
+      </Button>
+    );
+
+  /* Without Privy, Float asks for a browser wallet exactly as it always did. */
+  if (!session.enabled)
+    return (
+      <Button size={big ? "lg" : "sm"} className="min-h-11" onClick={() => setVisible(true)}>
+        <WalletIcon className="size-4" strokeWidth={1.75} />
+        Connect wallet
+      </Button>
+    );
+
+  /* With Privy, email leads. A business owner short of cash on Friday should
+     not have to install a browser extension before they can ask for credit,
+     and the people who already have one are the ones who will recognise
+     "connect a wallet" as the secondary option. */
   return (
-    <Button size={size === "lg" ? "lg" : "sm"} className="min-h-11" onClick={() => setVisible(true)}>
-      <WalletIcon className="size-4" strokeWidth={1.75} />
-      Connect wallet
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button size={big ? "lg" : "sm"} className="min-h-11" disabled={!session.ready} onClick={session.login}>
+        <Mail className="size-4" strokeWidth={1.75} />
+        {big ? "Sign in to apply" : "Sign in"}
+      </Button>
+      <Button
+        variant="outline"
+        size={big ? "lg" : "sm"}
+        className="min-h-11"
+        onClick={() => setVisible(true)}
+      >
+        <WalletIcon className="size-4" strokeWidth={1.75} />
+        {big ? "Connect a wallet" : "Wallet"}
+      </Button>
+    </div>
   );
 }
