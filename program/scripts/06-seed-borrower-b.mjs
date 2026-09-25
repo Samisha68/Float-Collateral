@@ -95,7 +95,7 @@ const baseMintB = new PublicKey(state.baseMintB);
 const pledgeB = seed(Buffer.from("pledge"), poolB.toBuffer());
 const verificationB = seed(Buffer.from("verification"), bob.publicKey.toBuffer());
 const recordB = seed(Buffer.from("record"), bob.publicKey.toBuffer());
-const loanB = seed(Buffer.from("loan"), bob.publicKey.toBuffer());
+const loanB = seed(Buffer.from("loan"), V, bob.publicKey.toBuffer());
 const floatBaseB = (await getOrCreateAssociatedTokenAccount(connection, payer, baseMintB, poolAuthority, true)).address;
 
 /* Trading B's pool. Anyone may trade it; the payer plays the market. */

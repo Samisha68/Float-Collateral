@@ -157,7 +157,7 @@ for (;;) {
 }
 await churn(2, new BN(5_000_000_000));
 
-const loan = seed(Buffer.from("loan"), newcomer.publicKey.toBuffer());
+const loan = seed(Buffer.from("loan"), V, newcomer.publicKey.toBuffer());
 const record = seed(Buffer.from("record"), newcomer.publicKey.toBuffer());
 const before = await getAccount(connection, theirUsdc).then((a) => a.amount);
 
