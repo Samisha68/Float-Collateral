@@ -31,24 +31,59 @@ export const PRIVY_APP_ID = (import.meta as any).env?.VITE_PRIVY_APP_ID ?? "";
     still works; it just asks for a wallet like it always did. */
 export const privyEnabled = () => PRIVY_APP_ID.length > 0;
 
-/** Push Privy's embedded wallet into the Wallet Standard registry.
+/* Which wallets Privy has put into the registry.
 
-    `registerWallet` returns an unregister function. Privy re-creates its
-    wallet objects as the user's account changes, so this re-runs and cleans
-    up after itself rather than accumulating duplicates in the picker. */
-function StandardWalletBridge() {
+   Registering a wallet makes it *available* to the adapter. It does not
+   connect it, and the first version of this bridge stopped there — so after
+   signing in the user sat on "Preparing your wallet" while a perfectly good
+   wallet waited, unselected, in a picker nobody opened.
+
+   The adapter cannot be driven from here, because this component lives
+   outside WalletProvider by necessity: the adapter reads the registry when it
+   mounts, so Privy has to register first. The names travel down instead, and
+   `PrivyAutoConnect` inside the provider does the selecting. */
+const PrivyWalletsContext = createContext<string[]>([]);
+
+export const usePrivyWalletNames = () => useContext(PrivyWalletsContext);
+
+function StandardWalletBridge({ children }: { children: ReactNode }) {
   const { wallets, ready } = useStandardWallets();
 
+  /* Only wallets that can actually be connected.
+
+     Privy publishes its Standard Wallet before anyone signs in, holding no
+     accounts. Registering that put a wallet in front of the adapter that
+     could not connect: autoConnect tried, threw WalletAccountError, and the
+     attempt began again — about 270 failures a second.
+
+     An account is the thing that makes a wallet connectable, so that is the
+     test. */
+  const usable = useMemo(
+    () => (ready ? wallets.filter((w: any) => (w.accounts?.length ?? 0) > 0) : []),
+    [ready, wallets],
+  );
+
+  /* A stable key, so the effect below runs when the *set* of wallets changes
+     rather than every time the hook hands back a new array. Deriving the
+     names instead of storing them removes the other half of that loop: the
+     old version called setNames inside the same effect whose dependency
+     changed identity on every render. */
+  const key = usable.map((w: any) => `${w.name}:${w.accounts[0]?.address ?? ""}`).join("|");
+  const names = useMemo(
+    () => usable.map((w: any) => w.name).filter(Boolean) as string[],
+    [key], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   useEffect(() => {
-    if (!ready || wallets.length === 0) return;
+    if (usable.length === 0) return;
     const { register } = getWallets();
-    const unregister = register(...(wallets as any));
+    const unregister = register(...(usable as any));
     return () => {
       try { unregister(); } catch { /* already gone */ }
     };
-  }, [ready, wallets]);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return null;
+  return <PrivyWalletsContext.Provider value={names}>{children}</PrivyWalletsContext.Provider>;
 }
 
 export function Privy({ children }: { children: ReactNode }) {
@@ -90,8 +125,9 @@ export function Privy({ children }: { children: ReactNode }) {
         } as any,
       }}
     >
-      <StandardWalletBridge />
-      <SessionProvider>{children}</SessionProvider>
+      <StandardWalletBridge>
+        <SessionProvider>{children}</SessionProvider>
+      </StandardWalletBridge>
     </PrivyProvider>
   );
 }

@@ -4,7 +4,7 @@
    discovers anything speaking the Wallet Standard, which is every wallet a
    judge is likely to already have. */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-adapter-react";
 import { WalletModalProvider, useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
@@ -17,7 +17,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { explorer } from "@/lib/format";
-import { usePrivySession } from "@/privy";
+import { usePrivySession, usePrivyWalletNames } from "@/privy";
 /* The adapter's own stylesheet is deliberately NOT imported. It is a dark
    theme carrying a purple accent and a Google Fonts download, and forcing it
    light left the modal title white on white. Float styles the modal itself,
@@ -30,10 +30,62 @@ export function Wallet({ children }: { children: ReactNode }) {
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={[]} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
+        <WalletModalProvider>
+          <PrivyAutoConnect />
+          {children}
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
+}
+
+/* Connect the wallet Privy just provisioned.
+
+   Registering a wallet into the Wallet Standard registry only makes it
+   selectable. Somebody still has to select it, and after a Privy sign-in
+   nobody ever would: the user has already chosen, and asking them to pick the
+   same wallet again out of a list of one is not a choice. The first version
+   of the bridge stopped at registration, which is why signing in left people
+   watching "Preparing your wallet" while a perfectly good wallet sat unused.
+
+   This has to live inside WalletProvider, and the bridge that registers has
+   to live outside it — the adapter reads the registry when it mounts, so
+   Privy must register first. The wallet names travel down between them. */
+function PrivyAutoConnect() {
+  const names = usePrivyWalletNames();
+  const { wallets, wallet, select, connect, connecting, publicKey } = useWallet();
+
+  /* Every guard is a ref. A retry counter kept in state is itself a
+     re-render, and re-rendering is exactly what drove the first version of
+     this into 270 failed connections a second. */
+  const attempted = useRef(new Set<string>());
+
+  /* A string, not the array. `wallets` is a fresh reference on every render,
+     so depending on it directly re-runs this forever. */
+  const available = wallets.map((w) => String(w.adapter.name)).join("|");
+
+  const target = useMemo(() => {
+    if (names.length === 0) return null;
+    return available.split("|").find((n) => n && names.includes(n)) ?? null;
+  }, [names, available]);
+
+  useEffect(() => {
+    if (!target || publicKey || connecting) return;
+    if (attempted.current.has(target)) return;
+
+    if (String(wallet?.adapter.name) !== target) {
+      select(target as any);
+      return;
+    }
+
+    /* Selected but not connected, so autoConnect did not take. Exactly one
+       attempt per wallet, ever. If it fails, ConnectButton's recovery state
+       takes over instead of this trying again. */
+    attempted.current.add(target);
+    connect().catch(() => {});
+  }, [target, publicKey, connecting, wallet, select, connect]);
+
+  return null;
 }
 
 /** Copy to clipboard, with the confirmation the click needs.
@@ -240,12 +292,17 @@ export function ConnectButton({
    only appears once waiting has plainly failed. */
 function Provisioning({ big }: { big: boolean }) {
   const { setVisible } = useWalletModal();
+  const names = usePrivyWalletNames();
   const [stuck, setStuck] = useState(false);
 
+  /* Restart the clock whenever Privy's answer changes, so a wallet arriving
+     late is given its own eight seconds rather than the tail of someone
+     else's. */
   useEffect(() => {
+    setStuck(false);
     const id = setTimeout(() => setStuck(true), 8000);
     return () => clearTimeout(id);
-  }, []);
+  }, [names.length]);
 
   if (!stuck)
     return (
@@ -255,6 +312,28 @@ function Provisioning({ big }: { big: boolean }) {
       </Button>
     );
 
+  /* Privy published nothing to connect. Almost always a dashboard setting,
+     which the page cannot fix and should not pretend to. */
+  if (names.length === 0)
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <Button
+          variant="outline"
+          size={big ? "lg" : "sm"}
+          className="min-h-11"
+          onClick={() => setVisible(true)}
+        >
+          <WalletIcon className="size-4" strokeWidth={1.75} />
+          Connect a wallet instead
+        </Button>
+        <p className="max-w-[42ch] text-caption leading-relaxed text-muted-foreground">
+          You are signed in, but no Solana wallet came back. Solana embedded wallets may not be
+          switched on for this Privy app.
+        </p>
+      </div>
+    );
+
+  /* There is a wallet; it simply has not connected. */
   return (
     <Button
       variant="outline"
@@ -263,7 +342,7 @@ function Provisioning({ big }: { big: boolean }) {
       onClick={() => setVisible(true)}
     >
       <WalletIcon className="size-4" strokeWidth={1.75} />
-      Connect your wallet
+      Finish connecting
     </Button>
   );
 }
